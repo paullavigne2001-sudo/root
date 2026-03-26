@@ -1,0 +1,2124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>MultiPlanet – HTML patterns intelligents</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MultiPlanet" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    html, body, #root {
+      margin: 0;
+      min-height: 100%;
+      background: #000;
+    }
+    * { box-sizing: border-box; }
+    body { overscroll-behavior: none; }
+    .mp-card {
+      background:#ffffff0d;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.14);
+      backdrop-filter: blur(6px);
+    }
+    .mp-safe {
+      padding-left: max(8px, env(safe-area-inset-left));
+      padding-right: max(8px, env(safe-area-inset-right));
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
+      padding-top: max(8px, env(safe-area-inset-top));
+    }
+    body {
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    .mp-safe-bottom {
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    #boot {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-family: system-ui, sans-serif;
+      padding: 24px;
+      text-align: center;
+    }
+    #errorbox {
+      display:none;
+      position: fixed;
+      inset: 16px;
+      z-index: 99999;
+      background: rgba(20,20,20,.96);
+      color: #fff;
+      border: 2px solid #ff6b6b;
+      border-radius: 16px;
+      padding: 16px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"><div id="boot">Chargement de MultiPlanet…</div></div>
+  <div id="errorbox"></div>
+  <script>
+    window.addEventListener("error", function (e) {
+      var box = document.getElementById("errorbox");
+      if (!box) return;
+      box.style.display = "block";
+      box.textContent = "Erreur JavaScript :\n\n" + (e.message || e.error || "Erreur inconnue");
+    });
+  </script>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+function useViewportSize() {
+  const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const onResize = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return vp;
+}
+
+async function tryLockLandscape() {
+  try {
+    if (document.fullscreenElement == null && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen().catch(() => {});
+    }
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape").catch(() => {});
+    }
+  } catch (e) {}
+}
+// Google Fonts - Nunito
+if (typeof document !== "undefined" && !document.getElementById("multiplanet-nunito-font")) {
+  const _fontLink = document.createElement("link");
+  _fontLink.id = "multiplanet-nunito-font";
+  _fontLink.rel = "stylesheet";
+  _fontLink.href = "https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap";
+  document.head.appendChild(_fontLink);
+}
+
+// ── i18n ─────────────────────────────────────────────────────────
+const LANGS = ["fr","en","es","it","de","pt"];
+const LANG_LABELS = { fr:"\u{1F1EB}\u{1F1F7} Fran\u00e7ais", en:"\u{1F1EC}\u{1F1E7} English", es:"\u{1F1EA}\u{1F1F8} Espa\u00f1ol", it:"\u{1F1EE}\u{1F1F9} Italiano", de:"\u{1F1E9}\u{1F1EA} Deutsch", pt:"\u{1F1F5}\u{1F1F9} Portugu\u00eas" };
+
+const T = {
+  appSubtitle: { fr:"L'aventure des chiffres !", en:"The number adventure!", es:"\u00a1La aventura de los n\u00fameros!", it:"L'avventura dei numeri!", de:"Das Zahlen-Abenteuer!", pt:"A aventura dos n\u00fameros!" },
+  play:        { fr:"Jouer !", en:"Play!", es:"\u00a1Jugar!", it:"Gioca!", de:"Spielen!", pt:"Jogar!" },
+  shop:        { fr:"Shop", en:"Shop", es:"Tienda", it:"Shop", de:"Shop", pt:"Loja" },
+  settings:    { fr:"Param\u00e8tres", en:"Settings", es:"Ajustes", it:"Impostazioni", de:"Einstellungen", pt:"Configura\u00e7\u00f5es" },
+  myHero:      { fr:"Mon h\u00e9ros", en:"My hero", es:"Mi h\u00e9roe", it:"Il mio eroe", de:"Mein Held", pt:"Meu her\u00f3i" },
+  myTables:    { fr:"Mes tables \u00e0 r\u00e9viser", en:"My times tables", es:"Mis tablas", it:"Le mie tabelline", de:"Meine Tabellen", pt:"Minhas tabuadas" },
+  levelWord:   { fr:"Niveau", en:"Level", es:"Nivel", it:"Livello", de:"Level", pt:"N\u00edvel" },
+  unlockHero:  { fr:"Gagne des \u2B50 pour d\u00e9bloquer de nouveaux h\u00e9ros !", en:"Earn \u2B50 to unlock new heroes!", es:"\u00a1Gana \u2B50 para desbloquear h\u00e9roes!", it:"Guadagna \u2B50 per sbloccare eroi!", de:"Sammle \u2B50 f\u00fcr neue Helden!", pt:"Ganhe \u2B50 para desbloquear her\u00f3is!" },
+  home:        { fr:"Accueil", en:"Home", es:"Inicio", it:"Home", de:"Start", pt:"In\u00edcio" },
+  back:        { fr:"< Retour", en:"< Back", es:"< Volver", it:"< Indietro", de:"< Zur\u00fcck", pt:"< Voltar" },
+  nextLevel:   { fr:"Niveau suivant !", en:"Next level!", es:"\u00a1Siguiente nivel!", it:"Livello successivo!", de:"N\u00e4chstes Level!", pt:"Pr\u00f3ximo n\u00edvel!" },
+  retry:       { fr:"R\u00e9essayer \u{1F4AA}", en:"Try again \u{1F4AA}", es:"Intentar de nuevo \u{1F4AA}", it:"Riprova \u{1F4AA}", de:"Nochmal \u{1F4AA}", pt:"Tentar novamente \u{1F4AA}" },
+  finished:    { fr:"termin\u00e9 !", en:"complete!", es:"\u00a1completado!", it:"completato!", de:"geschafft!", pt:"conclu\u00eddo!" },
+  starTotal:   { fr:"Total", en:"Total", es:"Total", it:"Totale", de:"Gesamt", pt:"Total" },
+  noStar:      { fr:"Mauvaise r\u00e9ponse \u2014 pas d'\u00e9toile cette fois \u{1F62C}", en:"Wrong answer \u2014 no star this time \u{1F62C}", es:"Respuesta incorrecta \u2014 sin estrella \u{1F62C}", it:"Risposta errata \u2014 nessuna stella \u{1F62C}", de:"Falsche Antwort \u2014 kein Stern \u{1F62C}", pt:"Resposta errada \u2014 sem estrela \u{1F62C}" },
+  nextChar:    { fr:"Prochain perso", en:"Next character", es:"Pr\u00f3ximo personaje", it:"Prossimo personaggio", de:"N\u00e4chste Figur", pt:"Pr\u00f3ximo personagem" },
+  newHero:     { fr:"Nouveau personnage !", en:"New character!", es:"\u00a1Nuevo personaje!", it:"Nuovo personaggio!", de:"Neue Figur!", pt:"Novo personagem!" },
+  unlockedMsg: { fr:"est d\u00e9bloqu\u00e9 !", en:"is unlocked!", es:"\u00a1est\u00e1 desbloqueado!", it:"\u00e8 sbloccato!", de:"ist freigeschaltet!", pt:"est\u00e1 desbloqueado!" },
+  skipBtn:     { fr:"Niveau trop difficile ? Passer \u27A1", en:"Too hard? Skip \u27A1", es:"\u00bfMuy dif\u00edcil? Saltar \u27A1", it:"Troppo difficile? Salta \u27A1", de:"Zu schwer? \u00dcberspringen \u27A1", pt:"Muito dif\u00edcil? Pular \u27A1" },
+  skipTitle:   { fr:"Passer le niveau", en:"Skip level", es:"Saltar el nivel", it:"Salta il livello", de:"Level \u00fcberspringen", pt:"Pular o n\u00edvel" },
+  skipHint:    { fr:"R\u00e9ponds correctement aux 2 pour gagner une \u2B50", en:"Answer both correctly to earn a \u2B50", es:"Responde correctamente las 2 para ganar \u2B50", it:"Rispondi correttamente a 2 per guadagnare \u2B50", de:"Beantworte beide richtig f\u00fcr einen \u2B50", pt:"Responda as 2 corretamente para ganhar \u2B50" },
+  skipQ:       { fr:"Question", en:"Question", es:"Pregunta", it:"Domanda", de:"Frage", pt:"Pergunta" },
+  skipWrong:   { fr:"Rat\u00e9 ! Retour au jeu.", en:"Wrong! Back to game.", es:"\u00a1Fallado! Vuelve al juego.", it:"Sbagliato! Torna al gioco.", de:"Falsch! Zur\u00fcck zum Spiel.", pt:"Errado! Volte ao jogo." },
+  answerWas:   { fr:"La r\u00e9ponse \u00e9tait", en:"The answer was", es:"La respuesta era", it:"La risposta era", de:"Die Antwort war", pt:"A resposta era" },
+  skipRight1:  { fr:"Bravo ! Question suivante\u2026", en:"Great! Next question\u2026", es:"\u00a1Bravo! Siguiente pregunta\u2026", it:"Bravo! Prossima domanda\u2026", de:"Super! N\u00e4chste Frage\u2026", pt:"\u00d3timo! Pr\u00f3xima pergunta\u2026" },
+  quizTitle:   { fr:"Question du niveau", en:"Level question", es:"Pregunta del nivel", it:"Domanda del livello", de:"Level-Frage", pt:"Pergunta do n\u00edvel" },
+  questionPrompt:{ fr:"Combien font...", en:"How much is...", es:"\u00bfCu\u00e1nto es...?", it:"Quanto fa...", de:"Wie viel ist...", pt:"Quanto \u00e9...?" },
+  heroShopHint:{ fr:"Touchez un personnage pour le choisir ou le d\u00e9bloquer", en:"Tap a character to select or unlock it", es:"Toca un personaje para elegirlo o desbloquearlo", it:"Tocca un personaggio per selezionarlo o sbloccarlo", de:"Tippe auf eine Figur, um sie zu w\u00e4hlen oder freizuschalten", pt:"Toque em um personagem para selecionar ou desbloquear" },
+  tablePassHint:{ fr:"D\u00e9bloquer les tables 4\u20139 avec le Pass MultiPlanet", en:"Unlock tables 4\u20139 with the MultiPlanet Pass", es:"Desbloquea las tablas 4\u20139 con el Pase MultiPlanet", it:"Sblocca le tabelline 4\u20139 con il Pass MultiPlanet", de:"Schalte die Reihen 4\u20139 mit dem MultiPlanet-Pass frei", pt:"Desbloqueie as tabuadas 4\u20139 com o Passe MultiPlanet" },
+  passTitle:{ fr:"Pass MultiPlanet", en:"MultiPlanet Pass", es:"Pase MultiPlanet", it:"Pass MultiPlanet", de:"MultiPlanet-Pass", pt:"Passe MultiPlanet" },
+  passUnlockAll:{ fr:"Toutes les tables d\u00e9bloqu\u00e9es !", en:"All tables unlocked!", es:"\u00a1Todas las tablas desbloqueadas!", it:"Tutte le tabelline sbloccate!", de:"Alle Reihen freigeschaltet!", pt:"Todas as tabuadas desbloqueadas!" },
+  passFeatures:{ fr:["Tables x4 \u00e0 x9","100 niveaux complets","Achat unique","Sans abonnement"], en:["Tables x4 to x9","100 full levels","One-time purchase","No subscription"], es:["Tablas x4 a x9","100 niveles completos","Compra \u00fanica","Sin suscripci\u00f3n"], it:["Tabelline x4 a x9","100 livelli completi","Acquisto unico","Senza abbonamento"], de:["Reihen x4 bis x9","100 komplette Level","Einmalkauf","Kein Abo"], pt:["Tabuadas x4 a x9","100 n\u00edveis completos","Compra \u00fanica","Sem assinatura"] },
+  oneTimePurchase:{ fr:"Achat unique \u00b7 Pas d'abonnement", en:"One-time purchase \u00b7 No subscription", es:"Compra \u00fanica \u00b7 Sin suscripci\u00f3n", it:"Acquisto unico \u00b7 Nessun abbonamento", de:"Einmalkauf \u00b7 Kein Abo", pt:"Compra \u00fanica \u00b7 Sem assinatura" },
+  parentWarning:{ fr:"Achat int\u00e9gr\u00e9 simul\u00e9. L'accord d'un parent ou tuteur l\u00e9gal est requis.", en:"Simulated in-app purchase. A parent or legal guardian must approve.", es:"Compra integrada simulada. Se requiere la autorizaci\u00f3n de un padre, madre o tutor legal.", it:"Acquisto in-app simulato. \u00c8 richiesto il consenso di un genitore o tutore legale.", de:"Simulierter In-App-Kauf. Die Zustimmung eines Elternteils oder Erziehungsberechtigten ist erforderlich.", pt:"Compra no app simulada. \u00c9 necess\u00e1ria a autoriza\u00e7\u00e3o de um respons\u00e1vel legal." },
+  buyNow:{ fr:"Acheter !", en:"Buy now!", es:"\u00a1Comprar!", it:"Acquista!", de:"Jetzt kaufen!", pt:"Comprar!" },
+  notNow:{ fr:"Pas maintenant", en:"Not now", es:"Ahora no", it:"Non ora", de:"Jetzt nicht", pt:"Agora n\u00e3o" },
+  adSafe:{ fr:"Espace publicitaire \u2013 Annonce s\u00e9curis\u00e9e pour enfants", en:"Ad space \u2013 Child-safe ad", es:"Espacio publicitario \u2013 Anuncio seguro para ni\u00f1os", it:"Spazio pubblicitario \u2013 Annuncio sicuro per bambini", de:"Werbefl\u00e4che \u2013 Kindersichere Anzeige", pt:"Espa\u00e7o publicit\u00e1rio \u2013 An\u00fancio seguro para crian\u00e7as" },
+  difficultyEasy:{ fr:"Facile", en:"Easy", es:"F\u00e1cil", it:"Facile", de:"Leicht", pt:"F\u00e1cil" },
+  difficultyNormal:{ fr:"Normal", en:"Normal", es:"Normal", it:"Normale", de:"Normal", pt:"Normal" },
+  difficultyHard:{ fr:"Difficile", en:"Hard", es:"Dif\u00edcil", it:"Difficile", de:"Schwer", pt:"Dif\u00edcil" },
+  difficultyIntense:{ fr:"Intense", en:"Intense", es:"Intenso", it:"Intenso", de:"Intensiv", pt:"Intenso" },
+  difficultyExtreme:{ fr:"Extr\u00eame", en:"Extreme", es:"Extremo", it:"Estremo", de:"Extrem", pt:"Extremo" },
+  speedLabel:{ fr:"Vitesse", en:"Speed", es:"Velocidad", it:"Velocit\u00e0", de:"Tempo", pt:"Velocidade" },
+  obstaclesLabel:{ fr:"Obstacles", en:"Obstacles", es:"Obst\u00e1culos", it:"Ostacoli", de:"Hindernisse", pt:"Obst\u00e1culos" },
+  flyingLabel:{ fr:"Volants", en:"Flying", es:"Voladores", it:"Volanti", de:"Fliegend", pt:"Voadores" },
+  jumpHint:    { fr:"\u2191 Sauter par-dessus les obstacles au sol", en:"\u2191 Jump over ground obstacles", es:"\u2191 Salta sobre los obst\u00e1culos del suelo", it:"\u2191 Salta sugli ostacoli a terra", de:"\u2191 \u00dcber Bodenhindernisse springen", pt:"\u2191 Pular sobre obst\u00e1culos no ch\u00e3o" },
+  duckHint:    { fr:"\u2193 Se baisser sous les obstacles volants", en:"\u2193 Duck under flying obstacles", es:"\u2193 Ag\u00e1chate bajo los obst\u00e1culos voladores", it:"\u2193 Abbassati sotto gli ostacoli volanti", de:"\u2193 Unter fliegenden Hindernissen ducken", pt:"\u2193 Abaixar sob obst\u00e1culos voadores" },
+  sound:       { fr:"Son", en:"Sound", es:"Sonido", it:"Suono", de:"Ton", pt:"Som" },
+  vibration:   { fr:"Vibrations", en:"Vibration", es:"Vibraci\u00f3n", it:"Vibrazione", de:"Vibration", pt:"Vibra\u00e7\u00e3o" },
+  language:    { fr:"Langue", en:"Language", es:"Idioma", it:"Lingua", de:"Sprache", pt:"Idioma" },
+  coppa:       { fr:"Application adapt\u00e9e aux enfants \u00b7 COPPA / RGPD-K", en:"Child-safe app \u00b7 COPPA / GDPR-K", es:"App para ni\u00f1os \u00b7 COPPA / RGPD-K", it:"App per bambini \u00b7 COPPA / GDPR-K", de:"Kinderfreundliche App \u00b7 COPPA / DSGVO-K", pt:"App para crian\u00e7as \u00b7 COPPA / RGPD-K" },
+  resetBtn:    { fr:"R\u00e9initialiser la progression", en:"Reset progress", es:"Reiniciar progreso", it:"Reimposta progressi", de:"Fortschritt zur\u00fccksetzen", pt:"Redefinir progresso" },
+  resetConfirm:{ fr:"Es-tu s\u00fbr ? Niveau, \u00e9toiles et personnages seront r\u00e9initialis\u00e9s. Le Pass MultiPlanet sera conserv\u00e9.", en:"Are you sure? Level, stars and characters will be reset. Your MultiPlanet Pass will be kept.", es:"\u00bfEst\u00e1s seguro? Nivel, estrellas y personajes se reiniciar\u00e1n. El Pase se conservar\u00e1.", it:"Sei sicuro? Livello, stelle e personaggi verranno azzerati. Il Pass viene mantenuto.", de:"Bist du sicher? Level, Sterne und Figuren werden zur\u00fcckgesetzt. Der Pass bleibt erhalten.", pt:"Tem certeza? N\u00edvel, estrelas e personagens ser\u00e3o redefinidos. O Passe ser\u00e1 mantido." },
+  resetYes:    { fr:"Oui, r\u00e9initialiser", en:"Yes, reset", es:"S\u00ed, reiniciar", it:"S\u00ec, reimposta", de:"Ja, zur\u00fccksetzen", pt:"Sim, redefinir" },
+  resetNo:     { fr:"Annuler", en:"Cancel", es:"Cancelar", it:"Annulla", de:"Abbrechen", pt:"Cancelar" },
+  cheers: {
+    fr:["Bien jou\u00e9 ! \u{1F3C6}","Tu d\u00e9chires ! \u{1F31F}","G\u00e9nial ! \u{1F389}","Incroyable ! \u{1F680}","Parfait ! \u2728","Tu es une star ! \u2B50"],
+    en:["Bien jou\u00e9 ! \u{1F3C6}","You rock! \u{1F31F}","Awesome! \u{1F389}","Incredible! \u{1F680}","Perfect! \u2728","You are a star! \u2B50"],
+    es:["\u00a1Super campe\u00f3n! \u{1F3C6}","\u00a1Eres incre\u00edble! \u{1F31F}","\u00a1Genial! \u{1F389}","\u00a1Incre\u00edble! \u{1F680}","\u00a1Perfecto! \u2728","\u00a1Eres una estrella! \u2B50"],
+    it:["Super campione! \u{1F3C6}","Sei forte! \u{1F31F}","Fantastico! \u{1F389}","Incredibile! \u{1F680}","Perfetto! \u2728","Sei una stella! \u2B50"],
+    de:["Super Champion! \u{1F3C6}","Du rockst! \u{1F31F}","Genial! \u{1F389}","Unglaublich! \u{1F680}","Perfekt! \u2728","Du bist ein Star! \u2B50"],
+    pt:["Super campe\u00e3o! \u{1F3C6}","Voc\u00ea \u00e9 incr\u00edvel! \u{1F31F}","Genial! \u{1F389}","Incr\u00edvel! \u{1F680}","Perfeito! \u2728","Voc\u00ea \u00e9 uma estrela! \u2B50"],
+  },
+  fails: {
+    fr:["Presque ! R\u00e9essaie \u{1F4AA}","Courage ! \u{1F308}","Encore un effort ! \u{1F3AF}"],
+    en:["Almost! Try again \u{1F4AA}","Keep going! \u{1F308}","One more try! \u{1F3AF}"],
+    es:["\u00a1Casi! Int\u00e9ntalo de nuevo \u{1F4AA}","\u00a1\u00c1nimo! \u{1F308}","\u00a1Un esfuerzo m\u00e1s! \u{1F3AF}"],
+    it:["Quasi! Riprova \u{1F4AA}","Coraggio! \u{1F308}","Ancora uno sforzo! \u{1F3AF}"],
+    de:["Fast! Nochmal \u{1F4AA}","Weiter so! \u{1F308}","Noch ein Versuch! \u{1F3AF}"],
+    pt:["Quase! Tente de novo \u{1F4AA}","Coragem! \u{1F308}","Mais um esfor\u00e7o! \u{1F3AF}"],
+  },
+};
+
+function tr(key, lang) {
+  const entry = T[key];
+  if (!entry) return key;
+  return entry[lang] ?? entry["fr"] ?? key;
+}
+
+function trList(key, lang) {
+  const entry = T[key];
+  if (!entry) return [];
+  return entry[lang] ?? entry["fr"] ?? [];
+}
+
+function getPlanetForLevel(level) {
+  return PLANETS[Math.floor((Math.max(level, 1) - 1) / 20) % PLANETS.length];
+}
+
+function getDifficultyLabel(level, lang) {
+  if (level <= 10) return tr("difficultyEasy", lang);
+  if (level <= 25) return tr("difficultyNormal", lang);
+  if (level <= 50) return tr("difficultyHard", lang);
+  if (level <= 75) return tr("difficultyIntense", lang);
+  return tr("difficultyExtreme", lang);
+}
+
+// ── Audio engine (Web Audio API) ─────────────────────────────────
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+function playTone({ freq=440, type="sine", duration=0.12, gain=0.18 }={}) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const vol = ctx.createGain();
+    osc.connect(vol); vol.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    vol.gain.setValueAtTime(gain, ctx.currentTime);
+    vol.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+function playSeq(notes) {
+  notes.forEach(n => setTimeout(() => playTone(n), (n.delay ?? 0) * 1000));
+}
+const SFX = {
+  jump:    () => playTone({ freq:520, type:"sine",     duration:0.15, gain:0.14 }),
+  duck:    () => playTone({ freq:260, type:"sine",     duration:0.12, gain:0.11 }),
+  crash:   () => playSeq([
+    { freq:200, type:"sawtooth", duration:0.12, gain:0.20, delay:0   },
+    { freq:150, type:"sawtooth", duration:0.14, gain:0.16, delay:0.1 },
+    { freq:100, type:"sawtooth", duration:0.18, gain:0.12, delay:0.2 },
+  ]),
+  correct: () => playSeq([
+    { freq:523, type:"sine", duration:0.1,  gain:0.16, delay:0   },
+    { freq:659, type:"sine", duration:0.1,  gain:0.16, delay:0.1 },
+    { freq:784, type:"sine", duration:0.18, gain:0.16, delay:0.2 },
+  ]),
+  wrong:   () => playSeq([
+    { freq:330, type:"sine", duration:0.12, gain:0.14, delay:0    },
+    { freq:220, type:"sine", duration:0.18, gain:0.14, delay:0.13 },
+  ]),
+  unlock:  () => playSeq([
+    { freq:523,  type:"sine", duration:0.08, gain:0.18, delay:0    },
+    { freq:659,  type:"sine", duration:0.08, gain:0.18, delay:0.09 },
+    { freq:784,  type:"sine", duration:0.08, gain:0.18, delay:0.18 },
+    { freq:1047, type:"sine", duration:0.2,  gain:0.18, delay:0.27 },
+  ]),
+  levelUp: () => playSeq([
+    { freq:392, type:"sine", duration:0.1,  gain:0.16, delay:0    },
+    { freq:523, type:"sine", duration:0.1,  gain:0.16, delay:0.11 },
+    { freq:659, type:"sine", duration:0.1,  gain:0.16, delay:0.22 },
+    { freq:784, type:"sine", duration:0.22, gain:0.16, delay:0.33 },
+  ]),
+};
+
+// ── Haptic ────────────────────────────────────────────────────────
+const HAP = {
+  jump:  () => { try { navigator.vibrate?.([30]);       } catch(e){} },
+  duck:  () => { try { navigator.vibrate?.([20]);       } catch(e){} },
+  crash: () => { try { navigator.vibrate?.([80,30,80]); } catch(e){} },
+};
+
+const TOTAL_LEVELS = 100;
+
+const PLANETS = [
+  { name: "Etoile Brillante", color: "#FFD700", bg: "#1a0a3e", stars: "#fff"    },
+  { name: "Planete Rose",     color: "#FF69B4", bg: "#200030", stars: "#FFD700" },
+  { name: "Jungle Cosmique",  color: "#00E676", bg: "#071a07", stars: "#7FFF00" },
+  { name: "Desert de Feu",    color: "#FF6D00", bg: "#1a0800", stars: "#FFD700" },
+  { name: "Ocean Gele",       color: "#00B0FF", bg: "#001a2e", stars: "#E0F7FA" },
+];
+
+// each character: color, label. Index 0 is free, others cost 10 stars each
+const CHARACTERS = [
+  { key:"astro", label:"Astronaute", color:"#4FC3F7", accent:"#B3E5FC" },
+  { key:"elf",   label:"Elfe",       color:"#81C784", accent:"#C8E6C9" },
+  { key:"uni",   label:"Licorne",    color:"#CE93D8", accent:"#F3E5F5" },
+  { key:"frog",  label:"Grenouille", color:"#66BB6A", accent:"#C8E6C9" },
+  { key:"robot", label:"Robot",      color:"#90A4AE", accent:"#ECEFF1" },
+  { key:"fox",   label:"Renard",     color:"#FF8A65", accent:"#FFE0B2" },
+  { key:"octo",  label:"Pieuvre",    color:"#AB47BC", accent:"#E1BEE7" },
+  { key:"bolt",  label:"Eclair",     color:"#FFD54F", accent:"#FFF59D" },
+];
+const CHAR_UNLOCK_COST = 10; // stars per character
+
+const OBS_GROUND = ["\u2604","\u{1F311}","\u{1F480}","\u{1FAA8}","\u{1F335}","\u{1F9B7}"];
+const OBS_FLY    = ["\u{1F47E}","\u{1F300}","\u{1FA90}","\u{1F6F0}","\u{1F985}","\u{1F4AB}"];
+
+// cheers and fails are now in T.cheers / T.fails (i18n)
+
+const rand  = (a) => a[Math.floor(Math.random() * a.length)];
+const randN = (mn, mx) => Math.floor(Math.random() * (mx - mn + 1)) + mn;
+
+
+function makeQuestion(tables) {
+  const a = rand(tables);
+  const b = randN(1, 9);
+  return { a, b, answer: a * b };
+}
+
+function makeChoices(answer) {
+  const s = new Set([answer]);
+  while (s.size < 4) {
+    const v = answer + randN(-15, 15);
+    if (v > 0 && v !== answer) s.add(v);
+  }
+  return [...s].sort(() => Math.random() - 0.5);
+}
+
+
+function Stars({ color }) {
+  const pts = useRef(Array.from({ length: 32 }, () => ({
+    x: Math.random() * 100, y: Math.random() * 100,
+    r: Math.random() * 2.5 + 0.8, d: (Math.random() * 2 + 1).toFixed(1),
+  }))).current;
+  return (
+    <div style={{ position:"absolute", inset:0, overflow:"hidden", pointerEvents:"none" }}>
+      {pts.map((p, i) => (
+        <div key={i} style={{
+          position:"absolute", left:`${p.x}%`, top:`${p.y}%`,
+          width:p.r, height:p.r, borderRadius:"50%", background:color, opacity:0.8,
+          animation:`twinkle ${p.d}s ease-in-out infinite alternate`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── Canvas game constants ─────────────────────────────────────────
+const W_C      = 900;
+const H_C      = 320;
+const GROUND_Y = 235;
+const CHAR_X   = 100;
+const FLY_Y    = GROUND_Y - 80;
+
+// Difficulty ramps gently — uses eased curve (ease-in) so early levels stay easy
+function getDifficulty(level) {
+  const t = Math.min((level - 1) / 99, 1);
+  const e = t * t; // ease-in: slow start, faster ramp at end
+
+  // Speed: flat 3.8 before lvl 25, linear 3.8→6.1 from lvl 25 to 75, flat 6.1 from lvl 75
+  let speed;
+  if (level < 25)       speed = 3.8;
+  else if (level >= 75) speed = 6.1;
+  else                  speed = 3.8 + ((level - 25) / 50) * (6.1 - 3.8);
+
+  return {
+    speed,
+    obsCount: Math.round(4 + e * 6),       // 4 → 10
+    spacing:  480 - Math.round(e * 200),   // 480 → 280
+    flyRatio: 0.15 + e * 0.35,             // 15% → 50%
+    jumpVY:  -23,
+    gravity:  1.15,
+  };
+}
+
+// ── Runner ────────────────────────────────────────────────────────
+
+const SMART_PATTERNS = {
+  easy: [
+    ["ground"],
+    ["fly"],
+    ["ground","ground"],
+    ["fly","ground"],
+    ["ground","gap"],
+    ["fly","gap"],
+  ],
+  medium: [
+    ["ground","fly"],
+    ["fly","ground"],
+    ["ground","ground","fly"],
+    ["ground","fly","ground"],
+    ["fly","gap","ground"],
+  ],
+  hard: [
+    ["ground","fly","ground"],
+    ["fly","ground","fly"],
+    ["ground","ground","fly","ground"],
+    ["ground","fly","gap","ground"],
+    ["fly","ground","gap","fly"],
+  ],
+  rest: [
+    ["gap"],
+    ["ground","gap"],
+    ["fly","gap"],
+    ["gap","gap"],
+  ],
+};
+
+function weightedPick(entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+  let r = Math.random() * total;
+  for (const [value, weight] of entries) {
+    r -= weight;
+    if (r <= 0) return value;
+  }
+  return entries[entries.length - 1][0];
+}
+
+function getPatternWeights(level) {
+  if (level <= 10) return { easy: 0.72, medium: 0.18, hard: 0.00, rest: 0.10 };
+  if (level <= 25) return { easy: 0.54, medium: 0.30, hard: 0.04, rest: 0.12 };
+  if (level <= 50) return { easy: 0.28, medium: 0.46, hard: 0.14, rest: 0.12 };
+  if (level <= 75) return { easy: 0.16, medium: 0.46, hard: 0.28, rest: 0.10 };
+  return { easy: 0.08, medium: 0.40, hard: 0.42, rest: 0.10 };
+}
+
+function getPlanetBias(level) {
+  const idx = Math.floor((Math.max(1, level) - 1) / 20);
+  switch (idx) {
+    case 0: return { moreGround: 0.18, moreFly: 0.00 };
+    case 1: return { moreGround: 0.05, moreFly: 0.08 };
+    case 2: return { moreGround: 0.00, moreFly: 0.14 };
+    case 3: return { moreGround: 0.12, moreFly: 0.00 };
+    default:return { moreGround: 0.06, moreFly: 0.10 };
+  }
+}
+
+function choosePatternCategory(level) {
+  const w = getPatternWeights(level);
+  return weightedPick([
+    ["easy", w.easy],
+    ["medium", w.medium],
+    ["hard", w.hard],
+    ["rest", w.rest],
+  ]);
+}
+
+function isPatternAllowed(pattern, ctx) {
+  const obstacleCount = pattern.filter(p => p !== "gap").length;
+  if (ctx.lastKey === pattern.join("-")) return false;
+  if (ctx.remaining <= 0 && obstacleCount > 0) return false;
+
+  const maxActions = ctx.level < 25 ? 2 : ctx.level < 55 ? 3 : 4;
+  let consecutive = 0;
+  for (const step of pattern) {
+    if (step === "gap") {
+      consecutive = 0;
+    } else {
+      consecutive += 1;
+      if (consecutive > maxActions) return false;
+    }
+  }
+
+  if (ctx.level < 18 && pattern.includes("fly") && pattern.includes("ground") && obstacleCount >= 3) return false;
+  if (ctx.remaining <= 2 && obstacleCount > ctx.remaining) return false;
+  if (ctx.recentKeys.includes(pattern.join("-"))) return false;
+
+  return true;
+}
+
+function buildSmartObstaclePlan(level, diff) {
+  const plan = [];
+  const recentKeys = [];
+  const bias = getPlanetBias(level);
+  const target = diff.obsCount;
+
+  while (plan.filter(p => p !== "gap").length < target) {
+    let selected = null;
+
+    for (let tries = 0; tries < 14; tries++) {
+      const category = choosePatternCategory(level);
+      const pool = SMART_PATTERNS[category];
+      const pattern = pool[Math.floor(Math.random() * pool.length)];
+      const ctx = {
+        level,
+        lastKey: recentKeys[recentKeys.length - 1] || "",
+        recentKeys: recentKeys.slice(-3),
+        remaining: target - plan.filter(p => p !== "gap").length,
+      };
+      if (!isPatternAllowed(pattern, ctx)) continue;
+      selected = pattern;
+      recentKeys.push(pattern.join("-"));
+      break;
+    }
+
+    if (!selected) selected = ["ground"];
+
+    selected.forEach(step => {
+      if (plan.filter(p => p !== "gap").length >= target && step !== "gap") return;
+      if (step === "ground" && Math.random() < bias.moreFly) {
+        plan.push("fly");
+      } else if (step === "fly" && Math.random() < bias.moreGround) {
+        plan.push("ground");
+      } else {
+        plan.push(step);
+      }
+    });
+
+    if (level < 30 && Math.random() < 0.18) plan.push("gap");
+    if (level > 70 && Math.random() < 0.10) plan.push("ground");
+  }
+
+  return plan;
+}
+
+
+function AvatarBadge({ charObj, size=72, animated=false }) {
+  const skin = "#FFE0BD";
+  const dark = "#1E2430";
+  const body = charObj.color;
+  const accent = charObj.accent || "#fff";
+  const head = {
+    width: size * 0.54,
+    height: size * 0.54,
+    borderRadius: charObj.key === "robot" ? size * 0.12 : size * 0.24,
+    background: charObj.key === "robot"
+      ? "linear-gradient(180deg,#ECEFF1,#B0BEC5)"
+      : "linear-gradient(180deg,#FFE9CC,#FFD5A8)",
+    border: `2px solid ${dark}`,
+    position: "absolute",
+    left: "50%",
+    top: size * 0.06,
+    transform: "translateX(-50%)",
+    boxSizing: "border-box",
+  };
+  return (
+    <div style={{
+      width:size, height:size, position:"relative", display:"inline-block",
+      transform: animated ? "translateY(0)" : "none",
+      filter: "drop-shadow(0 6px 10px rgba(0,0,0,.25))",
+    }}>
+      <div style={{
+        position:"absolute", left:"50%", top:size*0.50, transform:"translateX(-50%)",
+        width:size*0.42, height:size*0.28, borderRadius:size*0.16,
+        background:body, border:`2px solid ${dark}`, boxSizing:"border-box"
+      }} />
+      <div style={{
+        position:"absolute", left:"50%", top:size*0.70, transform:"translateX(-50%)",
+        width:size*0.46, height:size*0.16
+      }}>
+        <div style={{position:"absolute", left:size*0.08, top:0, width:2, height:size*0.15, background:dark}} />
+        <div style={{position:"absolute", right:size*0.08, top:0, width:2, height:size*0.15, background:dark}} />
+      </div>
+      <div style={head} />
+      <div style={{position:"absolute", left:"50%", top:size*0.24, transform:"translateX(-50%)", width:size*0.28, display:"flex", justifyContent:"space-between"}}>
+        <div style={{width:size*0.05, height:size*0.05, borderRadius:999, background:dark}} />
+        <div style={{width:size*0.05, height:size*0.05, borderRadius:999, background:dark}} />
+      </div>
+      <div style={{position:"absolute", left:"50%", top:size*0.34, transform:"translateX(-50%)", width:size*0.12, height:2, borderRadius:99, background:dark, opacity:.7}} />
+
+      {charObj.key === "astro" && (
+        <>
+          <div style={{position:"absolute", left:"50%", top:size*0.03, transform:"translateX(-50%)", width:size*0.62, height:size*0.62, borderRadius:"50%", border:`3px solid ${dark}`, boxSizing:"border-box"}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.11, transform:"translateX(-50%)", width:size*0.42, height:size*0.22, borderRadius:size*0.16, background:"rgba(120,210,255,.35)", border:"2px solid rgba(255,255,255,.7)"}} />
+        </>
+      )}
+      {charObj.key === "elf" && (
+        <>
+          <div style={{position:"absolute", left:size*0.19, top:size*0.18, width:size*0.12, height:size*0.16, background:skin, border:`2px solid ${dark}`, borderRadius:"0 60% 60% 60%", transform:"rotate(-35deg)"}} />
+          <div style={{position:"absolute", right:size*0.19, top:size*0.18, width:size*0.12, height:size*0.16, background:skin, border:`2px solid ${dark}`, borderRadius:"60% 0 60% 60%", transform:"rotate(35deg)"}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.07, transform:"translateX(-50%)", width:size*0.42, height:size*0.12, background:accent, border:`2px solid ${dark}`, borderRadius:size*0.10}} />
+        </>
+      )}
+      {charObj.key === "uni" && (
+        <>
+          <div style={{position:"absolute", left:size*0.25, top:size*0.10, width:size*0.12, height:size*0.16, background:accent, border:`2px solid ${dark}`, borderRadius:"60% 60% 0 60%", transform:"rotate(-18deg)"}} />
+          <div style={{position:"absolute", right:size*0.25, top:size*0.10, width:size*0.12, height:size*0.16, background:accent, border:`2px solid ${dark}`, borderRadius:"60% 60% 60% 0", transform:"rotate(18deg)"}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.00, transform:"translateX(-50%) rotate(10deg)", width:0, height:0, borderLeft:`${size*0.05}px solid transparent`, borderRight:`${size*0.05}px solid transparent`, borderBottom:`${size*0.22}px solid #FFD54F`}} />
+        </>
+      )}
+      {charObj.key === "frog" && (
+        <>
+          <div style={{position:"absolute", left:size*0.22, top:size*0.06, width:size*0.14, height:size*0.14, background:body, border:`2px solid ${dark}`, borderRadius:"50%"}} />
+          <div style={{position:"absolute", right:size*0.22, top:size*0.06, width:size*0.14, height:size*0.14, background:body, border:`2px solid ${dark}`, borderRadius:"50%"}} />
+        </>
+      )}
+      {charObj.key === "robot" && (
+        <>
+          <div style={{position:"absolute", left:"50%", top:size*0.00, transform:"translateX(-50%)", width:2, height:size*0.08, background:dark}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.00, transform:"translateX(-50%)", width:size*0.08, height:size*0.08, borderRadius:"50%", background:"#FF5252", border:`2px solid ${dark}`}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.22, transform:"translateX(-50%)", width:size*0.30, height:size*0.08, borderRadius:size*0.04, background:"rgba(120,220,255,.55)", border:`2px solid ${dark}`}} />
+        </>
+      )}
+      {charObj.key === "fox" && (
+        <>
+          <div style={{position:"absolute", left:size*0.24, top:size*0.08, width:size*0.14, height:size*0.18, background:body, border:`2px solid ${dark}`, borderRadius:"70% 10% 60% 10%", transform:"rotate(-18deg)"}} />
+          <div style={{position:"absolute", right:size*0.24, top:size*0.08, width:size*0.14, height:size*0.18, background:body, border:`2px solid ${dark}`, borderRadius:"10% 70% 10% 60%", transform:"rotate(18deg)"}} />
+        </>
+      )}
+      {charObj.key === "octo" && (
+        <>
+          <div style={{position:"absolute", left:"50%", top:size*0.08, transform:"translateX(-50%)", width:size*0.58, height:size*0.46, background:body, border:`2px solid ${dark}`, borderRadius:"50% 50% 42% 42%"}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.42, transform:"translateX(-50%)", width:size*0.44, height:size*0.08, display:"flex", justifyContent:"space-between"}}>
+            {[0,1,2,3].map(i => <div key={i} style={{width:size*0.06, height:size*0.11, border:`2px solid ${dark}`, borderTop:"none", borderRadius:"0 0 10px 10px", background:body}} />)}
+          </div>
+        </>
+      )}
+      {charObj.key === "bolt" && (
+        <>
+          <div style={{position:"absolute", left:"50%", top:size*0.02, transform:"translateX(-50%)", width:0, height:0, borderLeft:`${size*0.10}px solid transparent`, borderRight:`${size*0.05}px solid transparent`, borderTop:`${size*0.20}px solid ${accent}`, marginLeft:-size*0.04}} />
+          <div style={{position:"absolute", left:"50%", top:size*0.11, transform:"translateX(-50%)", width:0, height:0, borderLeft:`${size*0.05}px solid transparent`, borderRight:`${size*0.10}px solid transparent`, borderBottom:`${size*0.22}px solid ${accent}`, marginLeft:size*0.05}} />
+        </>
+      )}
+    </div>
+  );
+}
+
+
+function rr(ctx, x, y, w, h, r) {
+  const rad = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+function drawHeroCanvas(ctx, x, feet, charObj, state, tick=0) {
+  const dark = "#1E2430";
+  const skin = "#FFE0BD";
+  const bounce = !state.airborne && !state.ducking ? Math.sin(tick / 140) * 1.5 : 0;
+  const bodyColor = charObj.color;
+  const headW = charObj.key === "robot" ? 28 : 30;
+  const headH = charObj.key === "robot" ? 28 : 30;
+  const headX = x;
+  let headY = feet - 74 + bounce;
+  let bodyY = feet - 48 + bounce;
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (state.crashed) {
+    ctx.font = "48px serif";
+    ctx.fillText("💥", x - 22, feet - 10);
+    ctx.restore();
+    return;
+  }
+
+  if (state.ducking) {
+    headY = feet - 34;
+    bodyY = feet - 24;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 6;
+    ctx.fillStyle = bodyColor;
+    rr(ctx, x - 24, bodyY - 8, 42, 16, 8); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 4, bodyY + 2); ctx.lineTo(x - 22, bodyY + 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 8, bodyY + 2); ctx.lineTo(x + 24, bodyY - 10); ctx.stroke();
+  } else {
+    const swing = state.airborne ? 8 : (state.frame === 0 ? 12 : -12);
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(x - 7, bodyY + 24); ctx.lineTo(x - 10 - swing * 0.4, feet - 14); ctx.lineTo(x - 6 - swing * 0.8, feet); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 7, bodyY + 24); ctx.lineTo(x + 10 + swing * 0.4, feet - 14); ctx.lineTo(x + 6 + swing * 0.8, feet); ctx.stroke();
+    ctx.fillStyle = bodyColor;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 6;
+    rr(ctx, x - 14, bodyY, 28, 24, 10); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 11, bodyY + 7); ctx.lineTo(x - 20 + swing * 0.45, bodyY + 18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 11, bodyY + 7); ctx.lineTo(x + 20 - swing * 0.45, bodyY + 18); ctx.stroke();
+  }
+
+  // head
+  ctx.fillStyle = charObj.key === "robot"
+    ? "#DDE5EA"
+    : skin;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  if (charObj.key === "robot") ctx.roundRect(headX - headW/2, headY - headH/2, headW, headH, 7);
+  else ctx.roundRect(headX - headW/2, headY - headH/2, headW, headH, 12);
+  ctx.fill(); ctx.stroke();
+
+  // eyes
+  if (charObj.key === "robot") {
+    ctx.fillStyle = "#7FDBFF";
+    rr(ctx, headX - 10, headY - 4, 20, 8, 4); ctx.fill();
+  } else {
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.arc(headX - 6, headY - 2, 2.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(headX + 6, headY - 2, 2.3, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.65;
+    ctx.fillRect(headX - 4, headY + 6, 8, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // accessories
+  ctx.strokeStyle = dark;
+  ctx.fillStyle = charObj.accent || "#fff";
+  if (charObj.key === "astro") {
+    ctx.beginPath(); ctx.arc(headX, headY, 20, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "rgba(120,210,255,.28)";
+    rr(ctx, headX - 12, headY - 9, 24, 12, 6); ctx.fill();
+  } else if (charObj.key === "elf") {
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.moveTo(headX - 14, headY - 2); ctx.lineTo(headX - 22, headY - 7); ctx.lineTo(headX - 16, headY + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(headX + 14, headY - 2); ctx.lineTo(headX + 22, headY - 7); ctx.lineTo(headX + 16, headY + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = charObj.accent;
+    rr(ctx, headX - 12, headY - 18, 24, 6, 3); ctx.fill(); ctx.stroke();
+  } else if (charObj.key === "uni") {
+    ctx.fillStyle = charObj.accent;
+    ctx.beginPath(); ctx.moveTo(headX - 10, headY - 12); ctx.lineTo(headX - 4, headY - 22); ctx.lineTo(headX - 1, headY - 12); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(headX + 10, headY - 12); ctx.lineTo(headX + 4, headY - 22); ctx.lineTo(headX + 1, headY - 12); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#FFD54F";
+    ctx.beginPath(); ctx.moveTo(headX, headY - 24); ctx.lineTo(headX + 5, headY - 10); ctx.lineTo(headX - 3, headY - 10); ctx.closePath(); ctx.fill();
+  } else if (charObj.key === "frog") {
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.arc(headX - 8, headY - 15, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(headX + 8, headY - 15, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else if (charObj.key === "robot") {
+    ctx.beginPath(); ctx.moveTo(headX, headY - 18); ctx.lineTo(headX, headY - 25); ctx.stroke();
+    ctx.fillStyle = "#FF5252";
+    ctx.beginPath(); ctx.arc(headX, headY - 28, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else if (charObj.key === "fox") {
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.moveTo(headX - 13, headY - 8); ctx.lineTo(headX - 6, headY - 23); ctx.lineTo(headX - 1, headY - 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(headX + 13, headY - 8); ctx.lineTo(headX + 6, headY - 23); ctx.lineTo(headX + 1, headY - 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (charObj.key === "octo") {
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.arc(headX, headY - 3, 17, Math.PI, 0); ctx.fill(); ctx.stroke();
+  } else if (charObj.key === "bolt") {
+    ctx.fillStyle = charObj.accent;
+    ctx.beginPath(); ctx.moveTo(headX - 1, headY - 25); ctx.lineTo(headX + 7, headY - 12); ctx.lineTo(headX + 1, headY - 12); ctx.lineTo(headX + 8, headY); ctx.lineTo(headX - 4, headY - 10); ctx.lineTo(headX + 1, headY - 10); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+
+  // fallback highlight to guarantee visibility even if some accessory drawing fails
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath();
+  ctx.arc(x, feet - 28, 24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawObstacleCanvas(ctx, o, tick=0) {
+  const isFly = o.type === "fly";
+  const x = o.x;
+  const y = isFly ? (GROUND_Y - 84) + Math.sin(tick/220 + (o.bobPhase||0)) * 1.5 : (GROUND_Y - 4);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(isFly ? Math.sin(tick/260 + (o.bobPhase||0)) * 0.08 : 0);
+
+  if (isFly) {
+    const c1 = ["#80D8FF","#82B1FF","#B388FF","#7C4DFF"][o.skin % 4];
+    const c2 = ["#E1F5FE","#C5CAE9","#EDE7F6","#D1C4E9"][o.skin % 4];
+    ctx.fillStyle = c1;
+    ctx.strokeStyle = "#243447";
+    ctx.lineWidth = 4;
+    if (o.skin % 4 === 0) {
+      ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(-14, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(14, 0); ctx.stroke();
+    } else if (o.skin % 4 === 1) {
+      rr(ctx, -18, -12, 36, 24, 9); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.fillRect(-10, -4, 20, 8);
+      ctx.beginPath(); ctx.moveTo(-10, 14); ctx.lineTo(-20, 22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(10, 14); ctx.lineTo(20, 22); ctx.stroke();
+    } else if (o.skin % 4 === 2) {
+      ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(18,0); ctx.lineTo(0,18); ctx.lineTo(-18,0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-18,-10); ctx.lineTo(0,-22); ctx.lineTo(18,-10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-18,10); ctx.lineTo(0,22); ctx.lineTo(18,10); ctx.stroke();
+    }
+  } else {
+    const c1 = ["#FF8A65","#FF7043","#FFB74D","#EF5350"][o.skin % 4];
+    const c2 = ["#FFE0B2","#FFCCBC","#FFF3E0","#FFCDD2"][o.skin % 4];
+    ctx.fillStyle = c1;
+    ctx.strokeStyle = "#3B2A24";
+    ctx.lineWidth = 4;
+    if (o.skin % 4 === 0) {
+      ctx.beginPath(); ctx.moveTo(-18,14); ctx.lineTo(-10,-14); ctx.lineTo(0,8); ctx.lineTo(10,-18); ctx.lineTo(18,14); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.fillRect(-3,-2,6,8);
+    } else if (o.skin % 4 === 1) {
+      rr(ctx, -17,-12,34,26,10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.fillRect(-10,-4,20,8);
+    } else if (o.skin % 4 === 2) {
+      ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c2; ctx.beginPath(); ctx.arc(-4,-4,5,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.moveTo(-18,14); ctx.lineTo(-12,-12); ctx.lineTo(-4,14); ctx.lineTo(2,-10); ctx.lineTo(10,14); ctx.lineTo(16,-8); ctx.lineTo(18,14); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function Runner({ planet, charObj, level, onFinish, sfx = ()=>{}, hap = ()=>{}, lang="fr", isLandscapeMobile=false, vp={w:900,h:600} }) {
+  const diff = getDifficulty(level);
+  const landscape = isLandscapeMobile;
+
+  const canvasRef = useRef(null);
+  const doneFired = useRef(false);
+  const rafRef = useRef(null);
+
+  const FEET_Y_BASE = GROUND_Y + 2;
+
+  function makeLevelObstacles() {
+    const { spacing, flyRatio } = diff;
+    const plan = buildSmartObstaclePlan(level, diff);
+    const obs = [];
+    let x = 560;
+    let id = 0;
+
+    for (let i = 0; i < plan.length; i++) {
+      const step = plan[i];
+      if (step === "gap") {
+        const gapBoost = level < 30 ? 1.38 : level < 70 ? 1.24 : 1.14;
+        x += spacing * gapBoost;
+        continue;
+      }
+
+      const fly = step === "fly" ? true : (step === "ground" ? false : Math.random() < flyRatio);
+      const hitbox = fly
+        ? { xOffset: -18, width: 36, y: FEET_Y_BASE - 98, height: 24 }
+        : { xOffset: -14, width: 28, y: FEET_Y_BASE - 14, height: 14 };
+
+      obs.push({
+        id: id++,
+        x,
+        type: fly ? "fly" : "ground",
+        bobPhase: Math.random() * Math.PI * 2,
+        spinSeed: Math.random() * 0.8 + 0.6,
+        hitbox,
+        skin: Math.floor(Math.random() * 4),
+      });
+
+      const next = plan[i + 1];
+      const sameType = next && next !== "gap" && next === step;
+      const alternation = next && next !== "gap" && next !== step;
+      let localSpacing = spacing + randN(-16, 18);
+      if (sameType) localSpacing *= level < 40 ? 1.12 : 1.02;
+      if (alternation) localSpacing *= level < 40 ? 1.10 : 1.02;
+      if (i < 2) localSpacing *= 1.10;
+      x += Math.max(246, localSpacing);
+    }
+    return obs;
+  }
+
+  const S = useRef({
+    feetY: FEET_Y_BASE,
+    vy: 0,
+    onGround: true,
+    ducking: false,
+    obstacles: null,
+    progress: 0,
+    done: false,
+    crashed: false,
+    crashTimer: 0,
+  });
+
+  if (!S.current.obstacles) S.current.obstacles = makeLevelObstacles();
+
+  const startDuck = useCallback(() => {
+    const s = S.current;
+    if (!s.done && !s.crashed && s.onGround && !s.ducking) {
+      s.ducking = true;
+      sfx("duck");
+      hap("duck");
+    }
+  }, [sfx, hap]);
+
+  const endDuck = useCallback(() => {
+    S.current.ducking = false;
+  }, []);
+
+  const jump = useCallback(() => {
+    const s = S.current;
+    if (s.onGround && !s.done && !s.crashed && !s.ducking) {
+      s.vy = -17.2;
+      s.onGround = false;
+      sfx("jump");
+      hap("jump");
+    }
+  }, [diff.jumpVY, sfx, hap]);
+
+  useEffect(() => {
+    const kd = (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); jump(); }
+      if (e.code === "ArrowDown" || e.code === "ShiftLeft") { e.preventDefault(); startDuck(); }
+    };
+    const ku = (e) => {
+      if (e.code === "ArrowDown" || e.code === "ShiftLeft") endDuck();
+    };
+    window.addEventListener("keydown", kd);
+    window.addEventListener("keyup", ku);
+    return () => {
+      window.removeEventListener("keydown", kd);
+      window.removeEventListener("keyup", ku);
+    };
+  }, [jump, startDuck, endDuck]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+
+    function drawShadow(cx, rx, ry, alpha=0.18) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(cx, FEET_Y_BASE + 14, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawHead(cx, cy, r, forward = 0) {
+      const heroDark = "#2B2F3A";
+      const heroBody = charObj.color || "#4FC3F7";
+      const heroAccent = charObj.accent || "#ffffff";
+      const skin = "#FFE6C9";
+
+      ctx.fillStyle = skin;
+      ctx.strokeStyle = heroDark;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = heroDark;
+      ctx.beginPath(); ctx.arc(cx - 3 + forward * 0.8, cy - 1, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + 3 + forward * 0.8, cy - 1, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx + forward * 1.8, cy + 2.2, 2.9, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      ctx.fillStyle = heroAccent;
+      ctx.strokeStyle = heroDark;
+      ctx.lineWidth = 2.2;
+      if (charObj.key === "astro") {
+        ctx.beginPath(); ctx.arc(cx, cy, r + 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "rgba(140,220,255,.22)";
+        ctx.beginPath(); ctx.roundRect(cx - 8, cy - 6, 16, 8, 4); ctx.fill();
+      } else if (charObj.key === "elf") {
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.moveTo(cx - 10, cy - 1); ctx.lineTo(cx - 18, cy - 6); ctx.lineTo(cx - 12, cy + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + 10, cy - 1); ctx.lineTo(cx + 18, cy - 6); ctx.lineTo(cx + 12, cy + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = heroAccent;
+        ctx.beginPath(); ctx.roundRect(cx - 10, cy - r - 2, 20, 5, 3); ctx.fill(); ctx.stroke();
+      } else if (charObj.key === "uni") {
+        ctx.fillStyle = heroAccent;
+        ctx.beginPath(); ctx.moveTo(cx - 8, cy - 6); ctx.lineTo(cx - 3, cy - 14); ctx.lineTo(cx, cy - 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + 8, cy - 6); ctx.lineTo(cx + 3, cy - 14); ctx.lineTo(cx, cy - 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#FFD54F";
+        ctx.beginPath(); ctx.moveTo(cx, cy - r - 5); ctx.lineTo(cx + 4, cy - 6); ctx.lineTo(cx - 2, cy - 6); ctx.closePath(); ctx.fill();
+      } else if (charObj.key === "frog") {
+        ctx.fillStyle = heroBody;
+        ctx.beginPath(); ctx.arc(cx - 5, cy - r * 0.78, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx + 5, cy - r * 0.78, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      } else if (charObj.key === "robot") {
+        ctx.fillStyle = "#DDE5EA";
+        ctx.lineWidth = 3.2;
+        ctx.beginPath(); ctx.roundRect(cx - 10, cy - 10, 20, 20, 5); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#7FDBFF";
+        ctx.beginPath(); ctx.roundRect(cx - 6, cy - 2, 12, 5, 3); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 16); ctx.stroke();
+        ctx.fillStyle = "#FF5252";
+        ctx.beginPath(); ctx.arc(cx, cy - 18, 2.5, 0, Math.PI * 2); ctx.fill();
+      } else if (charObj.key === "fox") {
+        ctx.fillStyle = heroBody;
+        ctx.beginPath(); ctx.moveTo(cx - 7, cy - 5); ctx.lineTo(cx - 3, cy - 13); ctx.lineTo(cx, cy - 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + 7, cy - 5); ctx.lineTo(cx + 3, cy - 13); ctx.lineTo(cx, cy - 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else if (charObj.key === "octo") {
+        ctx.fillStyle = heroBody;
+        ctx.beginPath(); ctx.arc(cx, cy - 1, r + 1, Math.PI, 0); ctx.fill(); ctx.stroke();
+        for (let i = -2; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(cx - 6 + i * 4, cy + 6);
+          ctx.lineTo(cx - 6 + i * 4, cy + 10);
+          ctx.stroke();
+        }
+      } else if (charObj.key === "bolt") {
+        ctx.fillStyle = heroAccent;
+        ctx.beginPath();
+        ctx.moveTo(cx - 1, cy - r - 6);
+        ctx.lineTo(cx + 6, cy - 4);
+        ctx.lineTo(cx + 1, cy - 4);
+        ctx.lineTo(cx + 7, cy + 6);
+        ctx.lineTo(cx - 4, cy - 2);
+        ctx.lineTo(cx + 1, cy - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    function drawTorso(cx, cy, w, h) {
+      const heroDark = "#2B2F3A";
+      const heroBody = charObj.color || "#4FC3F7";
+      ctx.fillStyle = heroBody;
+      ctx.strokeStyle = heroDark;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 10);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawHero(s, tNow) {
+      const heroX = CHAR_X;
+      const heroDark = "#2B2F3A";
+      const airborne = !s.onGround;
+      const stride = airborne ? 0 : Math.sin(tNow / 105) * 6;
+
+      ctx.save();
+      ctx.strokeStyle = heroDark;
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      if (s.crashed) {
+        ctx.font = "48px serif";
+        ctx.fillText("💥", heroX - 22, s.feetY - 20);
+        ctx.restore();
+        return;
+      }
+
+      if (s.ducking) {
+        // New crouch: built entirely from a feet anchor. Feet stay on the floor.
+        const feetY = FEET_Y_BASE;
+
+        const backFoot = { x: heroX - 18, y: feetY };
+        const frontFoot = { x: heroX + 8, y: feetY };
+
+        const backKnee = { x: heroX - 14, y: feetY - 7 };
+        const frontKnee = { x: heroX + 12, y: feetY - 9 };
+
+        const backHip = { x: heroX - 4, y: feetY - 19 };
+        const frontHip = { x: heroX + 8, y: feetY - 19 };
+
+        const torso = { x: heroX + 8, y: feetY - 29 };
+        const neck = { x: heroX + 18, y: feetY - 35 };
+        const head = { x: heroX + 24, y: feetY - 43 };
+
+        const rearHand = { x: heroX + 2, y: feetY - 24 };
+        const frontHand = { x: heroX + 22, y: feetY - 22 };
+
+        drawShadow(heroX + 2, 24, 6, 0.2);
+
+        // feet
+        ctx.beginPath(); ctx.moveTo(backFoot.x - 6, backFoot.y); ctx.lineTo(backFoot.x + 6, backFoot.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(frontFoot.x - 6, frontFoot.y); ctx.lineTo(frontFoot.x + 6, frontFoot.y); ctx.stroke();
+
+        // lower legs
+        ctx.beginPath(); ctx.moveTo(backFoot.x, backFoot.y); ctx.lineTo(backKnee.x, backKnee.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(frontFoot.x, frontFoot.y); ctx.lineTo(frontKnee.x, frontKnee.y); ctx.stroke();
+
+        // upper legs
+        ctx.beginPath(); ctx.moveTo(backKnee.x, backKnee.y); ctx.lineTo(backHip.x, backHip.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(frontKnee.x, frontKnee.y); ctx.lineTo(frontHip.x, frontHip.y); ctx.stroke();
+
+        // torso
+        drawTorso(torso.x, torso.y, 32, 12);
+
+        // spine + neck forward
+        ctx.beginPath(); ctx.moveTo(heroX + 2, feetY - 29); ctx.lineTo(neck.x, neck.y); ctx.stroke();
+
+        // arms
+        ctx.beginPath(); ctx.moveTo(heroX + 4, feetY - 31); ctx.lineTo(rearHand.x, rearHand.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(heroX + 12, feetY - 30); ctx.lineTo(frontHand.x, frontHand.y); ctx.stroke();
+
+        // head clearly lower than standing, but still above torso
+        drawHead(head.x, head.y, 9, 1);
+      } else {
+        // standing / running / jumping skeleton, also feet-anchored
+        const feetY = s.feetY;
+        const leftFoot = { x: heroX - 8 - stride * 0.7, y: feetY };
+        const rightFoot = { x: heroX + 8 + stride * 0.7, y: feetY };
+        const leftKnee = { x: heroX - 10 - stride * 0.35, y: feetY - 8 };
+        const rightKnee = { x: heroX + 10 + stride * 0.35, y: feetY - 8 };
+        const pelvis = { x: heroX, y: feetY - 22 };
+        const torso = { x: heroX, y: feetY - 36 };
+        const neck = { x: heroX, y: feetY - 48 };
+        const head = { x: heroX, y: feetY - 60 };
+
+        drawShadow(heroX, airborne ? 12 : 18, airborne ? 4 : 6, airborne ? 0.12 : 0.18);
+
+        // feet
+        ctx.beginPath(); ctx.moveTo(leftFoot.x - 4, leftFoot.y); ctx.lineTo(leftFoot.x + 4, leftFoot.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rightFoot.x - 4, rightFoot.y); ctx.lineTo(rightFoot.x + 4, rightFoot.y); ctx.stroke();
+
+        // legs
+        ctx.beginPath(); ctx.moveTo(leftFoot.x, leftFoot.y); ctx.lineTo(leftKnee.x, leftKnee.y); ctx.lineTo(pelvis.x - 5, pelvis.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(rightFoot.x, rightFoot.y); ctx.lineTo(rightKnee.x, rightKnee.y); ctx.lineTo(pelvis.x + 5, pelvis.y); ctx.stroke();
+
+        // torso
+        drawTorso(torso.x, torso.y, 28, 24);
+
+        // spine
+        ctx.beginPath(); ctx.moveTo(pelvis.x, pelvis.y); ctx.lineTo(neck.x, neck.y); ctx.stroke();
+
+        // arms
+        ctx.beginPath(); ctx.moveTo(heroX - 10, feetY - 40); ctx.lineTo(heroX - 20 + stride * 0.5, feetY - 30); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(heroX + 10, feetY - 40); ctx.lineTo(heroX + 20 - stride * 0.5, feetY - 30); ctx.stroke();
+
+        drawHead(head.x, head.y, 12, 0);
+      }
+
+      ctx.restore();
+    }
+
+    const tick = () => {
+      const s = S.current;
+
+      if (!s.crashed && !s.done) {
+        if (!s.ducking) {
+          s.vy += 0.72;
+          s.feetY += s.vy;
+          if (s.feetY < 120) {
+            s.feetY = 120;
+            if (s.vy < 0) s.vy = 0;
+          }
+          if (s.feetY >= FEET_Y_BASE) {
+            s.feetY = FEET_Y_BASE;
+            s.vy = 0;
+            s.onGround = true;
+          }
+        } else {
+          s.feetY = FEET_Y_BASE;
+          s.vy = 0;
+          s.onGround = true;
+        }
+
+        s.obstacles.forEach(o => { o.x -= diff.speed; });
+
+        const passed = s.obstacles.filter(o => o.x < CHAR_X - 40).length;
+        s.progress = Math.min(99, Math.round((passed / diff.obsCount) * 95));
+
+        const playerBox = s.ducking
+          ? { x: CHAR_X - 22, y: FEET_Y_BASE - 30, width: 58, height: 30 }
+          : { x: CHAR_X - 18, y: s.feetY - 72, width: 40, height: 72 };
+
+        s.obstacles.forEach(o => {
+          const ox = o.x + o.hitbox.xOffset;
+          const oy = o.hitbox.y;
+          const horizontalOverlap = playerBox.x < ox + o.hitbox.width &&
+            playerBox.x + playerBox.width > ox;
+
+          if (!horizontalOverlap) return;
+
+          if (o.type === "fly") {
+            if (!s.ducking) {
+              s.crashed = true;
+              s.crashTimer = 65;
+              sfx("crash");
+              hap("crash");
+            }
+            return;
+          }
+
+          const verticalOverlap = playerBox.y < oy + o.hitbox.height &&
+            playerBox.y + playerBox.height > oy;
+
+          if (!verticalOverlap) return;
+
+          s.crashed = true;
+          s.crashTimer = 65;
+          sfx("crash");
+          hap("crash");
+        });
+
+        if (s.obstacles.every(o => o.x < -60) && !doneFired.current) {
+          s.progress = 100;
+          s.done = true;
+        }
+      } else if (s.crashed) {
+        s.crashTimer--;
+        if (s.crashTimer <= 0) {
+          s.crashed = false;
+          s.feetY = FEET_Y_BASE;
+          s.vy = 0;
+          s.onGround = true;
+          s.ducking = false;
+          s.obstacles = makeLevelObstacles();
+          s.progress = 0;
+        }
+      }
+
+      const W = W_C, H = H_C;
+      ctx.clearRect(0, 0, W, H);
+
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, planet.bg + "ff");
+      sky.addColorStop(1, planet.bg + "cc");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+
+      // finish flag
+      ctx.font = "40px serif";
+      ctx.fillText("🏁", W - 64, FEET_Y_BASE + 16);
+
+      // ground
+      ctx.save();
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = planet.color;
+      ctx.strokeStyle = planet.color;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(0, FEET_Y_BASE);
+      ctx.lineTo(W, FEET_Y_BASE);
+      ctx.stroke();
+      ctx.restore();
+
+      drawHero(s, Date.now());
+
+      s.obstacles.forEach(o => {
+        if (o.x < -60 || o.x > W + 30) return;
+        drawObstacleCanvas(ctx, o, Date.now());
+      });
+
+      ctx.fillStyle = "#ffffff1a";
+      ctx.fillRect(16, 12, W - 32, 14);
+      ctx.fillStyle = planet.color;
+      ctx.fillRect(16, 12, (W - 32) * (s.progress / 100), 14);
+      ctx.fillStyle = "#ffffffcc";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(s.progress + "% 🏁", W - 76, 26);
+
+      if (s.done && !doneFired.current) {
+        doneFired.current = true;
+        cancelAnimationFrame(rafRef.current);
+        setTimeout(onFinish, 350);
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [planet, charObj, onFinish, lang, diff, sfx, hap]);
+
+  const canvasHeight = landscape
+    ? Math.max(280, Math.min(vp.h - 120, 420))
+    : H_C;
+
+  const btnBase = {
+    flex: 1,
+    fontSize: landscape ? 30 : 36,
+    border: "none",
+    borderRadius: 16,
+    cursor: "pointer",
+    userSelect: "none",
+    touchAction: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 900,
+    transition: "filter 0.1s",
+  };
+
+  return (
+    <div style={{ width:"100%", position:"relative" }}>
+      <canvas
+        ref={canvasRef}
+        width={W_C}
+        height={H_C}
+        style={{
+          width:"100%",
+          height: landscape ? `${canvasHeight}px` : "auto",
+          aspectRatio:`${W_C}/${H_C}`,
+          borderRadius: landscape ? 16 : 14,
+          display:"block"
+        }}
+      />
+
+      <div style={{
+        display:"flex",
+        gap: landscape ? 0 : 12,
+        marginTop: landscape ? 0 : 10,
+        height: landscape ? 0 : 80,
+        position: landscape ? "absolute" : "static",
+        left: landscape ? 12 : "auto",
+        right: landscape ? 12 : "auto",
+        bottom: landscape ? 12 : "auto",
+        justifyContent:"space-between",
+        pointerEvents: landscape ? "none" : "auto"
+      }}>
+        <button
+          onPointerDown={(e) => { e.preventDefault(); jump(); }}
+          style={{
+            ...btnBase,
+            background:`linear-gradient(135deg, ${planet.color}cc, ${planet.color}66)`,
+            color:"#1a0a3e",
+            boxShadow:`0 4px 20px ${planet.color}55`,
+            minWidth: landscape ? 82 : undefined,
+            minHeight: landscape ? 82 : undefined,
+            pointerEvents:"auto",
+            opacity:0.96
+          }}
+        >
+          &#x2191;
+        </button>
+
+        <button
+          onPointerDown={(e) => { e.preventDefault(); startDuck(); }}
+          onPointerUp={(e)   => { e.preventDefault(); endDuck(); }}
+          onPointerLeave={(e)=> { e.preventDefault(); endDuck(); }}
+          style={{
+            ...btnBase,
+            background:"linear-gradient(135deg,#FF69B4cc,#FF69B466)",
+            color:"#fff",
+            boxShadow:"0 4px 20px #FF69B455",
+            minWidth: landscape ? 82 : undefined,
+            minHeight: landscape ? 82 : undefined,
+            pointerEvents:"auto",
+            opacity:0.96
+          }}
+        >
+          &#x2193;
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Question ──────────────────────────────────────────────────────
+function Question({ question, planet, onResult, lang="fr" }) {
+  const [choices]  = useState(() => makeChoices(question.answer));
+  const [picked,   setPicked]  = useState(null);
+  const [feedback, setFeedback] = useState(null);
+
+  const pick = (c) => {
+    if (picked !== null) return;
+    setPicked(c);
+    const ok = c === question.answer;
+    setFeedback(ok ? "ok" : "ko");
+    setTimeout(() => onResult(ok), 950);
+  };
+
+  return (
+    <div style={{ textAlign:"center", padding:"8px 0" }}>
+      <div style={{ fontSize:15, color:"#ffffffaa", marginBottom:6 }}>{tr("questionPrompt", lang)}</div>
+      <div style={{
+        fontSize:54, fontWeight:900, color:planet.color,
+        textShadow:`0 0 24px ${planet.color}88`,
+        margin:"4px 0 18px", animation:"pulse 1.2s ease-in-out infinite",
+      }}>
+        {question.a} x {question.b} = ?
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {choices.map((c, i) => {
+          let bg = "#ffffff14", border = "#ffffff30";
+          if (picked !== null) {
+            if (c === question.answer)                 { bg="#00C85333"; border="#00C853"; }
+            if (c === picked && c !== question.answer) { bg="#FF174433"; border="#FF1744"; }
+          }
+          return (
+            <button key={i} onClick={() => pick(c)} style={{
+              padding:"15px 8px", fontSize:26, fontWeight:900,
+              background:bg, border:`2px solid ${border}`, borderRadius:14,
+              color:"#fff", cursor:"pointer", transition:"all 0.15s",
+            }}>
+              {c}
+            </button>
+          );
+        })}
+      </div>
+      {feedback && (
+        <div style={{ marginTop:14, animation:"bounceIn 0.3s ease" }}>
+          {feedback === "ok" ? (
+            <div style={{ fontSize:22, fontWeight:900, color:"#00C853" }}>
+              {T.cheers[lang]?.[Math.floor(Math.random()*T.cheers[lang].length)] ?? T.cheers.fr[0]}
+            </div>
+          ) : (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:18, fontWeight:900, color:"#FF5252" }}>
+                {T.fails[lang]?.[Math.floor(Math.random()*T.fails[lang].length)] ?? T.fails.fr[0]}
+              </div>
+              <div style={{ marginTop:6, fontSize:20, fontWeight:900, color:"#FFD700", background:"#FFD70022", borderRadius:10, padding:"6px 14px", display:"inline-block" }}>
+                {tr("answerWas", lang)} : {question.a} × {question.b} = {question.answer}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Level complete ────────────────────────────────────────────────
+function LevelDone({ level, correct, totalStars, newUnlock, onNext, lang="fr", unlockedChars=[] }) {
+  return (
+    <div style={{ textAlign:"center", padding:"16px 0" }}>
+      <div style={{ fontSize:64, animation:"spin 0.7s ease" }}>{"\u{1F3C6}"}</div>
+      <div style={{ fontSize:26, fontWeight:900, color:"#FFD700", margin:"10px 0 4px" }}>{tr("levelWord",lang)} {level} {tr("finished",lang)}</div>
+
+      {/* Star earned */}
+      {correct ? (
+        <div style={{ fontSize:18, color:"#FFD700", margin:"8px 0", fontWeight:700 }}>
+          +1 {"\u2B50"} &nbsp;—&nbsp; Total : {totalStars} {"\u2B50"}
+        </div>
+      ) : (
+        <div style={{ fontSize:15, color:"#ffffff77", margin:"8px 0" }}>
+          {tr("noStar", lang)}
+        </div>
+      )}
+
+      {/* Progress bar toward next character */}
+      {(() => {
+        const nextIdx = CHARACTERS.findIndex((_, i) => i > 0 && !unlockedChars.includes(i));
+        if (nextIdx === -1) return null;
+        const progress = Math.min(totalStars % CHAR_UNLOCK_COST, CHAR_UNLOCK_COST);
+        return (
+          <div style={{ margin:"10px 16px", textAlign:"left" }}>
+            <div style={{ fontSize:12, color:"#ffffff77", marginBottom:4, display:"flex", justifyContent:"space-between" }}>
+              <span style={{display:"inline-flex", alignItems:"center", gap:8}}>{tr("nextChar",lang)} : <AvatarBadge charObj={CHARACTERS[nextIdx]} size={36} /> {CHARACTERS[nextIdx].label}</span>
+              <span>{totalStars % CHAR_UNLOCK_COST}/{CHAR_UNLOCK_COST} {"\u2B50"}</span>
+            </div>
+            <div style={{ background:"#ffffff22", borderRadius:8, height:10 }}>
+              <div style={{ width:`${(progress / CHAR_UNLOCK_COST) * 100}%`, background:"#FFD700", height:"100%", borderRadius:8, transition:"width 0.5s" }} />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* New character unlocked! */}
+      {newUnlock && (
+        <div style={{
+          margin:"12px 16px", padding:"12px", borderRadius:14,
+          background:"linear-gradient(135deg,#FFD70033,#FF6D0022)",
+          border:"2px solid #FFD700", animation:"bounceIn 0.4s ease",
+        }}>
+          <div><AvatarBadge charObj={newUnlock} size={72} /></div>
+          <div style={{ fontSize:16, fontWeight:900, color:"#FFD700" }}>{tr("newHero",lang)}</div>
+          <div style={{ fontSize:13, color:"#ffffff99" }}>{newUnlock.label} {tr("unlockedMsg",lang)}</div>
+        </div>
+      )}
+
+      <button onClick={onNext} style={{
+        marginTop:14, padding:"14px 40px", fontSize:19, fontWeight:900,
+        background: correct
+          ? "linear-gradient(135deg,#FFD700,#FF6D00)"
+          : "linear-gradient(135deg,#4FC3F7,#0288D1)",
+        border:"none", borderRadius:50, color:"#1a0a3e", cursor:"pointer",
+        boxShadow: correct ? "0 4px 20px #FFD70066" : "0 4px 20px #4FC3F766",
+      }}>
+        {correct ? tr("nextLevel",lang) : tr("retry",lang)}
+      </button>
+    </div>
+  );
+}
+
+// ── Table picker ──────────────────────────────────────────────────
+function TablePicker({ selected, unlocked, onToggle, lang="fr" }) {
+  return (
+    <div>
+      <div style={{ fontSize:15, fontWeight:900, color:"#FFD700", textAlign:"center", marginBottom:10 }}>
+        {tr("myTables", lang)}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
+        {[1,2,3,4,5,6,7,8,9].map(n => {
+          const isU = unlocked.includes(n), isS = selected.includes(n);
+          return (
+            <button key={n} onClick={() => onToggle(n)} style={{
+              padding:"12px 4px", fontSize:17, fontWeight:900,
+              background: isS ? "#FFD70022" : "#ffffff11",
+              border:`2px solid ${isS ? "#FFD700" : "#ffffff22"}`,
+              borderRadius:12, color: isU ? "#fff" : "#ffffff44",
+              cursor: isU ? "pointer" : "not-allowed", position:"relative",
+            }}>
+              x{n}
+              {!isU && <span style={{ position:"absolute", top:2, right:4, fontSize:11 }}>{"\u{1F512}"}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {[4,5,6,7,8,9].some(n => !unlocked.includes(n)) && (
+        <div style={{ marginTop:10, padding:"8px 12px", background:"#FFD70011", border:"1px solid #FFD70033", borderRadius:10, fontSize:12, color:"#FFD700", textAlign:"center" }}>
+          {tr("tablePassHint", lang)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shop ──────────────────────────────────────────────────────────
+function Shop({ onClose, onBuy, lang="fr", alreadyBought=false }) {
+  const buyLabel = alreadyBought ? "Déjà acheté" : "Achetez !";
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#000000cc", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"linear-gradient(135deg,#1a0a3e,#0d1a4e)", border:"2px solid #FFD700", borderRadius:20, padding:24, maxWidth:320, width:"100%", boxShadow:"0 0 40px #FFD70044" }}>
+        <div style={{ textAlign:"center", marginBottom:14 }}>
+          <div style={{ fontSize:52 }}>{"🌟"}</div>
+          <div style={{ fontSize:22, fontWeight:900, color:"#FFD700" }}>{tr("passTitle", lang)}</div>
+          <div style={{ fontSize:13, color:"#ffffff99", marginTop:4 }}>{tr("passUnlockAll", lang)}</div>
+        </div>
+
+        {trList("passFeatures", lang).map((f,i)=>(
+          <div key={i} style={{ display:"flex", gap:8, alignItems:"center", color:"#fff", fontSize:14, marginBottom:7 }}>
+            <span style={{ color:"#00C853", fontSize:16 }}>{"✓"}</span>{f}
+          </div>
+        ))}
+
+        <div style={{ textAlign:"center", margin:"14px 0 4px", fontSize:30, fontWeight:900, color:"#FFD700" }}>2,99 EUR</div>
+        <div style={{ fontSize:11, color:"#ffffff55", textAlign:"center", marginBottom:12 }}>{tr("oneTimePurchase", lang)}</div>
+
+        <div style={{ fontSize:11, color:"#FFD70099", background:"#FFD70011", border:"1px solid #FFD70033", borderRadius:8, padding:"8px 10px", marginBottom:14, lineHeight:1.6, textAlign:"center" }}>
+          {tr("parentWarning", lang)}
+        </div>
+
+        <button
+          disabled={alreadyBought}
+          onClick={() => {
+            if (alreadyBought) return;
+            onBuy();
+          }}
+          style={{
+            width:"100%",
+            padding:14,
+            fontSize:17,
+            fontWeight:900,
+            background: alreadyBought ? "#646a76" : "linear-gradient(135deg,#FFD700,#FF6D00)",
+            border:"none",
+            borderRadius:50,
+            color: alreadyBought ? "#d7dbe2" : "#1a0a3e",
+            cursor: alreadyBought ? "not-allowed" : "pointer",
+            marginBottom:8,
+            opacity: alreadyBought ? 0.72 : 1,
+            boxShadow: alreadyBought ? "none" : "0 8px 20px rgba(255,165,0,.28)",
+            pointerEvents: alreadyBought ? "none" : "auto"
+          }}
+        >
+          {buyLabel}
+        </button>
+
+        {alreadyBought && (
+          <div style={{ textAlign:"center", color:"#ffffff88", fontSize:12, marginBottom:10 }}>
+            Pass déjà activé
+          </div>
+        )}
+
+        <button onClick={onClose} style={{ width:"100%", padding:10, fontSize:14, background:"transparent", border:"1px solid #ffffff33", borderRadius:50, color:"#ffffff77", cursor:"pointer" }}>
+          {tr("notNow", lang)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Skip Quiz : 2 multiplications pour passer le niveau ──────────
+function SkipQuiz({ tables, planet, onDone, lang="fr" }) {
+  const initialQuestion = useRef(makeQuestion(tables));
+  const [step,      setStep]     = useState(0);       // 0 or 1
+  const [q,         setQ]        = useState(initialQuestion.current);
+  const [choices,   setChoices]  = useState(() => makeChoices(initialQuestion.current.answer));
+  const [results,   setResults]  = useState([]);      // true/false per step
+  const [picked,    setPicked]   = useState(null);
+  const [feedback,  setFeedback] = useState(null);
+
+  // fresh question when step changes
+  useEffect(() => {
+    const nq = makeQuestion(tables);
+    setQ(nq);
+    setChoices(makeChoices(nq.answer));
+    setPicked(null);
+    setFeedback(null);
+  }, [step]);
+
+  const pick = (c) => {
+    if (picked !== null) return;
+    setPicked(c);
+    const ok = c === q.answer;
+    setFeedback(ok);
+    setTimeout(() => {
+      if (!ok) {
+        onDone(false); // faux → retour au jeu
+      } else if (step < 1) {
+        setResults([true]);
+        setStep(1);
+      } else {
+        onDone(true); // les 2 bonnes → niveau passé + étoile
+      }
+    }, 1100);
+  };
+
+  return (
+    <div style={{ padding:"8px 0", textAlign:"center" }}>
+      <div style={{ fontSize:13, color:"#ffffff77", marginBottom:4 }}>
+        {tr("skipQ",lang)} {step + 1} / 2 — {tr("skipHint",lang)}
+      </div>
+      {/* stepper dots */}
+      <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:14 }}>
+        {[0,1].map(i => (
+          <div key={i} style={{
+            width:12, height:12, borderRadius:"50%",
+            background: i < step ? "#00C853" : i === step ? planet.color : "#ffffff33",
+            transition:"background 0.3s",
+          }} />
+        ))}
+      </div>
+
+      <div style={{
+        fontSize:50, fontWeight:900, color:planet.color,
+        textShadow:`0 0 20px ${planet.color}88`,
+        margin:"4px 0 18px", animation:"pulse 1.2s ease-in-out infinite",
+      }}>
+        {q.a} x {q.b} = ?
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {choices.map((c, i) => {
+          let bg = "#ffffff14", border = "#ffffff30";
+          if (picked !== null) {
+            if (c === q.answer)                 { bg="#00C85333"; border="#00C853"; }
+            if (c === picked && c !== q.answer) { bg="#FF174433"; border="#FF1744"; }
+          }
+          return (
+            <button key={i} onClick={() => pick(c)} style={{
+              padding:"14px 8px", fontSize:26, fontWeight:900,
+              background:bg, border:`2px solid ${border}`, borderRadius:14,
+              color:"#fff", cursor:"pointer", transition:"all 0.15s",
+            }}>{c}</button>
+          );
+        })}
+      </div>
+
+      {feedback !== null && (
+        <div style={{ marginTop:12, animation:"bounceIn 0.3s ease" }}>
+          {feedback ? (
+            <div style={{ fontSize:20, fontWeight:900, color:"#00C853" }}>
+              {step < 1 ? tr("skipRight1",lang) : ""}
+            </div>
+          ) : (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:17, fontWeight:900, color:"#FF5252" }}>{tr("skipWrong",lang)}</div>
+              <div style={{ marginTop:6, fontSize:19, fontWeight:900, color:"#FFD700", background:"#FFD70022", borderRadius:10, padding:"5px 12px", display:"inline-block" }}>
+                {tr("answerWas",lang)} : {q.a} × {q.b} = {q.answer}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── Settings modal ────────────────────────────────────────────────
+function Settings({ soundOn, setSoundOn, hapticOn, setHapticOn, lang, setLang, onClose, onReset }) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const Toggle = ({ value, onChange, label }) => (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #ffffff11" }}>
+      <span style={{ fontSize:15, color:"#ffffffcc" }}>{label}</span>
+      <div onClick={() => onChange(!value)} style={{
+        width:46, height:26, borderRadius:13, cursor:"pointer", position:"relative",
+        background: value ? "#00C853" : "#ffffff22", transition:"background 0.2s",
+      }}>
+        <div style={{
+          position:"absolute", top:3, left: value ? 22 : 2,
+          width:20, height:20, borderRadius:"50%", background:"#fff",
+          transition:"left 0.2s", boxShadow:"0 1px 4px #0004",
+        }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#000000cc", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"linear-gradient(135deg,#1a0a3e,#0d1a4e)", border:"2px solid #ffffff33", borderRadius:20, padding:24, maxWidth:320, width:"100%", boxShadow:"0 0 40px #0008" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <div style={{ fontSize:20, fontWeight:900, color:"#fff" }}>
+            {"\u2699\uFE0F"} {tr("settings", lang)}
+          </div>
+          <button onClick={onClose} style={{ background:"#ffffff22", border:"none", borderRadius:50, width:32, height:32, color:"#fff", fontSize:18, cursor:"pointer", lineHeight:"32px" }}>✕</button>
+        </div>
+
+        <Toggle value={soundOn}  onChange={setSoundOn}  label={"\u{1F50A} " + tr("sound",lang)} />
+        <Toggle value={hapticOn} onChange={setHapticOn} label={"\u{1F4F3} " + tr("vibration",lang)} />
+
+        <div style={{ marginTop:14, paddingBottom:14, borderBottom:"1px solid #ffffff11" }}>
+          <div style={{ fontSize:13, color:"#ffffff77", marginBottom:8 }}>{"\u{1F310} "}{tr("language",lang)}</div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+            {LANGS.map(l => (
+              <button key={l} onClick={() => setLang(l)} style={{
+                padding:"6px 12px", fontSize:13, fontWeight:700, borderRadius:20, cursor:"pointer",
+                background: lang===l ? "#FFD70033" : "#ffffff11",
+                border: `2px solid ${lang===l ? "#FFD700" : "#ffffff22"}`,
+                color: lang===l ? "#FFD700" : "#ffffff88",
+              }}>{LANG_LABELS[l]}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Reset progress */}
+        <div style={{ marginTop:14 }}>
+          {!confirmReset ? (
+            <button onClick={() => setConfirmReset(true)} style={{
+              width:"100%", padding:"10px", fontSize:13, fontWeight:700,
+              background:"#FF174411", border:"1px solid #FF174444",
+              borderRadius:12, color:"#FF7043", cursor:"pointer",
+            }}>
+              {"\u{1F504}"} {tr("resetBtn", lang)}
+            </button>
+          ) : (
+            <div style={{ background:"#FF174411", border:"1px solid #FF174444", borderRadius:12, padding:12 }}>
+              <div style={{ fontSize:12, color:"#FFB74D", marginBottom:10, lineHeight:1.5 }}>
+                {tr("resetConfirm", lang)}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => { onReset(); setConfirmReset(false); onClose(); }} style={{
+                  flex:1, padding:"8px", fontSize:13, fontWeight:900,
+                  background:"#FF1744", border:"none", borderRadius:10,
+                  color:"#fff", cursor:"pointer",
+                }}>
+                  {tr("resetYes", lang)}
+                </button>
+                <button onClick={() => setConfirmReset(false)} style={{
+                  flex:1, padding:"8px", fontSize:13, fontWeight:700,
+                  background:"#ffffff22", border:"none", borderRadius:10,
+                  color:"#fff", cursor:"pointer",
+                }}>
+                  {tr("resetNo", lang)}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ── APP ───────────────────────────────────────────────────────────
+const SAVE_KEY = "multiplanet-save";
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function writeSave(data) {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function App() {
+  const vp = useViewportSize();
+  const isMobile = vp.w <= 900;
+  const isPortrait = vp.h >= vp.w;
+  const mobileLandscape = isMobile && !isPortrait;
+  const mobilePortrait = isMobile && isPortrait;
+  const isLandscapeMobile = mobileLandscape;
+
+  useEffect(() => {
+    if (isMobile) tryLockLandscape();
+  }, [isMobile]);
+
+  useEffect(() => {
+    const openShop = () => setShop(true);
+    window.addEventListener("open-multiplanet-shop", openShop);
+    return () => window.removeEventListener("open-multiplanet-shop", openShop);
+  }, []);
+  const saved = useRef(loadSave());
+  const s0    = saved.current;
+
+  const [screen,        setScreen]       = useState("home");
+  const [level,         setLevel]        = useState(s0?.level        ?? 1);
+  const [tables,        setTables]       = useState(s0?.tables       ?? [1, 2]);
+  const [unlocked,      setUnlocked]     = useState(s0?.unlocked     ?? [1, 2, 3]);
+  const [heroIdx,       setHeroIdx]      = useState(s0?.heroIdx      ?? 0);
+  const [question,      setQuestion]     = useState(null);
+  const [correct,       setCorrect]      = useState(false);
+  const [totalStars,    setTotalStars]   = useState(s0?.totalStars   ?? 0);
+  const [unlockedChars, setUnlockedChars]= useState(s0?.unlockedChars ?? [0]);
+  const [newUnlock,     setNewUnlock]    = useState(null);
+  const [shop,          setShop]         = useState(false);
+  const [soundOn,       setSoundOn]      = useState(s0?.soundOn      ?? true);
+  const [hapticOn,      setHapticOn]     = useState(s0?.hapticOn     ?? true);
+  const [lang,          setLang]         = useState(s0?.lang         ?? "fr");
+  const [showSettings,  setShowSettings] = useState(false);
+
+  // helpers that respect user prefs
+  const sfx = useCallback((name) => { if (soundOn) { try { getAudioCtx().resume?.(); } catch(e) {} SFX[name]?.(); } }, [soundOn]);
+  const hap = useCallback((name) => { if (hapticOn) HAP[name]?.(); }, [hapticOn]);
+
+  // Save to localStorage whenever key state changes
+  useEffect(() => {
+    writeSave({ level, tables, unlocked, heroIdx, totalStars, unlockedChars, soundOn, hapticOn, lang });
+  }, [level, tables, unlocked, heroIdx, totalStars, unlockedChars, soundOn, hapticOn, lang]);
+
+  const planet    = getPlanetForLevel(level);
+  const charObj   = CHARACTERS[heroIdx];
+  const useTabs   = tables.filter(t => unlocked.includes(t));
+  const activeTabs = useTabs.length > 0 ? useTabs : [1];
+
+  const toggleTable = (n) => {
+    if (!unlocked.includes(n)) { setShop(true); return; }
+    setTables(prev => prev.includes(n) ? (prev.length > 1 ? prev.filter(x => x !== n) : prev) : [...prev, n]);
+  };
+
+  const handleRunFinish = useCallback(() => {
+    setQuestion(makeQuestion(activeTabs));
+    setScreen("quiz");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level, activeTabs.join(",")]);
+
+  const handleAnswer = (ok) => {
+    setCorrect(ok);
+    if (ok) {
+      sfx("correct");
+      setTotalStars(prev => {
+        const next = prev + 1;
+        setNewUnlock(null);
+        return next;
+      });
+      setTimeout(() => { sfx("levelUp"); setScreen("done"); }, 950);
+    } else {
+      sfx("wrong");
+      setNewUnlock(null);
+      setTimeout(() => setScreen("run"), 950);
+    }
+  };
+
+  const handleSkipDone = (bothCorrect) => {
+    if (!bothCorrect) {
+      sfx("wrong");
+      setScreen("run");
+      return;
+    }
+    sfx("correct");
+    setNewUnlock(null);
+    setCorrect(true);
+    setTotalStars(prev => {
+      const next = prev + 1;
+
+      return next;
+    });
+    setTimeout(() => sfx("levelUp"), 200);
+    setScreen("done");
+  };
+
+  const handleReset = () => {
+    const passOwned = unlocked.length >= 9; // pass was bought if all tables unlocked
+    setLevel(1);
+    setTotalStars(0);
+    setUnlockedChars([0]);
+    setHeroIdx(0);
+    setTables([1, 2]);
+    if (!passOwned) setUnlocked([1, 2, 3]);
+    setScreen("home");
+  };
+
+  const handleNext = () => {
+    if (correct) {
+      setLevel(l => (l < TOTAL_LEVELS ? l + 1 : 1));
+    }
+    setNewUnlock(null);
+    setQuestion(null);
+    setScreen("run");
+  };
+
+  // game screen uses landscape layout
+  const isGame = screen === "run";
+
+  return (
+    <div style={{
+      minHeight:"100vh", background:planet.bg,
+      fontFamily:"'Nunito', sans-serif",
+      display:"flex", flexDirection:"column", alignItems:"center",
+      position:"relative", overflowX:"hidden",
+    }}>
+      <style>{`
+        @keyframes twinkle  { from{opacity:.3;transform:scale(.8)} to{opacity:1;transform:scale(1.3)} }
+        @keyframes float    { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+        @keyframes pulse    { 0%,100%{transform:scale(1)} 50%{transform:scale(1.07)} }
+        @keyframes spin     { from{transform:rotate(0deg) scale(.4);opacity:0} to{transform:rotate(360deg) scale(1);opacity:1} }
+        @keyframes bounceIn { from{transform:scale(.4);opacity:0} to{transform:scale(1);opacity:1} }
+        @keyframes slideUp  { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
+        button:active { filter: brightness(0.85); }
+      `}</style>
+
+      <Stars color={planet.stars} />
+
+      {/* ── GAME SCREEN (landscape, full width) ── */}
+      {isGame && (
+        <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:960, padding:"10px 12px 80px", animation:"slideUp .3s ease" }}>
+          {/* game header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <button onClick={() => setScreen("home")} style={{ background:"#ffffff22", border:"none", borderRadius:20, padding:"5px 14px", color:"#fff", cursor:"pointer", fontSize:15 }}>
+              {"<"} Accueil
+            </button>
+            <div style={{ fontSize:16, fontWeight:900, color:planet.color, textShadow:`0 0 10px ${planet.color}` }}>
+              {planet.name} — Niveau {level}
+            </div>
+            <div style={{ color:"#FFD700", fontSize:14, fontWeight:700 }}>{"\u2B50"} {totalStars}</div>
+          </div>
+
+          <div style={{ background:"#ffffff0d", borderRadius:18, padding:12, border:`1px solid ${planet.color}33` }}>
+            {(() => {
+              const d = getDifficulty(level);
+              const label = getDifficultyLabel(level, lang);
+              const labelColor = level <= 10 ? "#00C853" : level <= 25 ? "#FFD700" : level <= 50 ? "#FF8A65" : level <= 75 ? "#FF5252" : "#FF1744";
+              return (
+                <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:8, fontSize:12, color:"#ffffff88", flexWrap:"wrap" }}>
+                  <span style={{ color:labelColor, fontWeight:900, fontSize:13 }}>{label}</span>
+                  <span>{tr("speedLabel", lang)} : {d.speed.toFixed(1)}</span>
+                  <span>{tr("obstaclesLabel", lang)} : {d.obsCount}</span>
+                  <span>{tr("flyingLabel", lang)} : {Math.round(d.flyRatio * 100)}%</span>
+                </div>
+              );
+            })()}
+            <Runner
+            key={`run-${level}-${heroIdx}`}
+            planet={planet}
+            charObj={charObj}
+            level={level}
+            onFinish={handleRunFinish}
+            sfx={sfx}
+            hap={hap}
+            lang={lang}
+            isLandscapeMobile={mobileLandscape}
+            vp={vp}
+          />
+          </div>
+
+          <div style={{ textAlign:"center", marginTop:8, fontSize:13, color:"#ffffff55" }}>
+            {tr("jumpHint",lang)} | {tr("duckHint",lang)}
+          </div>
+
+          {/* Skip button */}
+          <div style={{ textAlign:"center", marginTop:10 }}>
+            <button onClick={() => setScreen("skip")} style={{
+              padding:"8px 22px", fontSize:13, fontWeight:700,
+              background:"#ffffff11", border:"1px solid #ffffff33",
+              borderRadius:50, color:"#ffffff88", cursor:"pointer",
+            }}>
+              {tr("skipBtn",lang)}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SKIP MODAL (overlay above game) ── */}
+      {screen === "skip" && (
+        <div style={{ position:"fixed", inset:0, zIndex:150, background:"#000000bb", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ background:"linear-gradient(135deg,#1a0a3e,#0d1a4e)", border:`2px solid ${planet.color}`, borderRadius:20, padding:24, width:"100%", maxWidth:360, boxShadow:`0 0 40px ${planet.color}44`, animation:"slideUp .25s ease" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+              <div style={{ fontSize:16, fontWeight:900, color:planet.color }}>{tr("skipTitle",lang)} {level}</div>
+              <button onClick={() => setScreen("run")} style={{ background:"#ffffff22", border:"none", borderRadius:50, width:30, height:30, color:"#fff", fontSize:16, cursor:"pointer", lineHeight:"30px" }}>✕</button>
+            </div>
+            <SkipQuiz tables={activeTabs} planet={planet} onDone={handleSkipDone} lang={lang} />
+          </div>
+        </div>
+      )}
+
+      {/* ── ALL OTHER SCREENS (portrait, centered) ── */}
+      {!isGame && (
+        <div style={{
+          position:"relative", zIndex:10, width:"100%",
+          maxWidth: mobileLandscape ? "100%" : (isMobile ? "100%" : 420),
+          flex:1, paddingBottom: mobileLandscape ? 46 : 70, animation:"slideUp .3s ease"
+        }}>
+          {/* header */}
+          <div style={{
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding: mobileLandscape ? "8px 12px 6px" : "14px 16px 6px"
+          }}>
+            {screen !== "home"
+              ? <button onClick={() => setScreen("home")} style={{ background:"#ffffff22", border:"none", borderRadius:20, padding:"5px 12px", color:"#fff", cursor:"pointer", fontSize:15 }}>{"<"} Accueil</button>
+              : <div />}
+            <div style={{ fontSize:18, fontWeight:900, color:planet.color, textShadow:`0 0 12px ${planet.color}` }}>MultiPlanet</div>
+            <div style={{ color:"#FFD700", fontSize:13, fontWeight:700 }}>{"\u2B50"} {totalStars}</div>
+          </div>
+
+          <div style={{ padding:"0 14px" }}>
+
+            {/* HOME */}
+            {screen === "home" && (
+              <div style={{
+                display:"grid",
+                gridTemplateColumns: mobileLandscape ? "minmax(260px, 34%) 1fr" : "1fr",
+                gap: mobileLandscape ? 12 : 0,
+                alignItems:"stretch"
+              }}>
+                <div className="mp-card" style={{
+                  padding: mobileLandscape ? 14 : 12,
+                  textAlign:"center",
+                  border:`1px solid ${planet.color}33`
+                }}>
+                  <div style={{ margin:"8px 0 4px", animation:"float 3s ease-in-out infinite" }}>
+                    <AvatarBadge charObj={charObj} size={mobileLandscape ? 132 : 120} animated />
+                  </div>
+                  <div style={{ fontSize: mobileLandscape ? 30 : 28, fontWeight:900, color:"#fff", textShadow:`0 0 18px ${planet.color}`, marginBottom:2 }}>MultiPlanet</div>
+                  <div style={{ fontSize:13, color:"#ffffff77", marginBottom:14 }}>{tr("appSubtitle",lang)}</div>
+
+                  <div style={{ display:"flex", gap:8, justifyContent:"center", alignItems:"center", marginBottom:14 }}>
+                    <span style={{ color:"#ffffff66", fontSize:13 }}>{tr("levelWord",lang)} :</span>
+                    <span style={{ color:planet.color, fontSize:16, fontWeight:900, background:`${planet.color}22`, borderRadius:10, padding:"2px 10px" }}>{level} / {TOTAL_LEVELS}</span>
+                  </div>
+
+                  <div style={{ display:"grid", gridTemplateColumns: mobileLandscape ? "1fr" : "repeat(3,auto)", gap:10, justifyContent:"center" }}>
+                    <button onClick={() => setScreen("run")} style={{ padding: mobileLandscape ? "16px 24px" : "15px 36px", fontSize: mobileLandscape ? 20 : 19, fontWeight:900, border:"none", borderRadius:50, background:`linear-gradient(135deg,${planet.color},${planet.color}88)`, color:"#1a0a3e", cursor:"pointer", boxShadow:`0 4px 20px ${planet.color}55` }}>{tr("play",lang)}</button>
+                    <button onClick={() => setShop(true)} style={{ padding:"14px 18px", fontSize:15, fontWeight:700, border:`2px solid #FFD700`, borderRadius:50, background:"#FFD70011", color:"#FFD700", cursor:"pointer" }}>{tr("shop",lang)}</button>
+                    <button onClick={() => setShowSettings(true)} style={{ padding:"14px 18px", fontSize:17, fontWeight:700, border:"2px solid #ffffff33", borderRadius:50, background:"#ffffff11", color:"#ffffff99", cursor:"pointer" }}>{"\u2699\uFE0F"}</button>
+                  </div>
+
+                  <div style={{ marginTop:14, padding:"8px 12px", borderRadius:10, background:"#ffffff08", border:"1px solid #ffffff11", fontSize:11, color:"#ffffff44", lineHeight:1.6 }}>
+                    {tr("coppa",lang)}
+                  </div>
+                </div>
+
+                <div style={{ display:"grid", gridTemplateRows: "auto auto", gap:12 }}>
+                  <div className="mp-card" style={{ padding:12, border:`1px solid ${planet.color}33` }}>
+                    <div style={{ fontSize:13, color:"#ffffff77", marginBottom:8, textAlign:"center" }}>{tr("myHero",lang)}</div>
+                    <div style={{ display:"grid", gridTemplateColumns: mobileLandscape ? "repeat(4, minmax(0,1fr))" : "repeat(4, 1fr)", gap:8 }}>
+                      {CHARACTERS.map((c, i) => {
+                        const isUnlocked = unlockedChars.includes(i);
+                        const isSelected = heroIdx === i;
+                        const cost = i === 0 ? 0 : CHAR_UNLOCK_COST;
+                        const canAfford = totalStars >= cost;
+                        return (
+                          <button key={i} onClick={() => {
+                            if (isUnlocked) { setHeroIdx(i); }
+                            else if (canAfford) {
+                              setTotalStars(s => s - cost);
+                              setUnlockedChars(u => [...u, i]);
+                              setNewUnlock(c);
+                              sfx("unlock");
+                              setHeroIdx(i);
+                            }
+                          }} style={{
+                            background: isSelected ? `${c.color}44` : isUnlocked ? "#ffffff11" : "#ffffff08",
+                            border:`2px solid ${isSelected ? c.color : isUnlocked ? "#ffffff22" : "#ffffff11"}`,
+                            borderRadius:12, padding:"8px 6px", cursor: isUnlocked || canAfford ? "pointer" : "not-allowed",
+                            display:"flex", flexDirection:"column", alignItems:"center", gap:4, minHeight:80,
+                            position:"relative", opacity: !isUnlocked && !canAfford ? 0.5 : 1,
+                          }}>
+                            <span style={{ filter: isUnlocked ? "none" : "grayscale(0.25)", opacity:isUnlocked?1:0.8 }}><AvatarBadge charObj={c} size={42} /></span>
+                            {isUnlocked ? (
+                              <span style={{ fontSize:10, color: isSelected ? c.color : "#ffffff66", fontWeight:700 }}>{c.label}</span>
+                            ) : (
+                              <span style={{ fontSize:10, color: canAfford ? "#FFD700" : "#ffffff44", fontWeight:700 }}>{CHAR_UNLOCK_COST}{"\u2B50"}</span>
+                            )}
+                            {!isUnlocked && <span style={{ position:"absolute", top:3, right:5, fontSize:11 }}>{canAfford ? "\u{1F513}" : "\u{1F512}"}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop:8, fontSize:11, color:"#ffffff55", textAlign:"center" }}>{tr("heroShopHint",lang)}</div>
+                    {unlockedChars.length < CHARACTERS.length && (
+                      <div style={{ marginTop:4, fontSize:11, color:"#ffffff55", textAlign:"center" }}>{tr("unlockHero",lang)}</div>
+                    )}
+                  </div>
+
+                  <div className="mp-card" style={{ padding:14, border:`1px solid ${planet.color}33` }}>
+                    <TablePicker selected={tables} unlocked={unlocked} onToggle={toggleTable} lang={lang} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* QUIZ */}
+            {screen === "quiz" && question && (
+              <div className="mp-card" style={{ padding:16, border:`1px solid ${planet.color}33`, maxWidth: mobileLandscape ? 900 : "none", margin: mobileLandscape ? "0 auto" : "0" }}>
+                <div style={{ textAlign:"center", marginBottom:10, fontSize:15, color:planet.color, fontWeight:700 }}>{tr("quizTitle",lang)} {level}</div>
+                <Question key={`q-${level}`} question={question} planet={planet} onResult={handleAnswer} lang={lang} />
+              </div>
+            )}
+
+            {/* DONE */}
+            {screen === "done" && (
+              <div className="mp-card" style={{ padding:16, border:`1px solid ${planet.color}33`, maxWidth: mobileLandscape ? 900 : "none", margin: mobileLandscape ? "0 auto" : "0" }}>
+                <LevelDone level={level} correct={correct} totalStars={totalStars} newUnlock={newUnlock} onNext={handleNext} lang={lang} unlockedChars={unlockedChars} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Ad banner */}
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, height: mobileLandscape ? 38 : 56, zIndex:100, background:"#0a0520f0", borderTop:"1px solid #ffffff18", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ background:"#ffffff0d", border:"1px solid #ffffff1a", borderRadius:8, padding: mobileLandscape ? "4px 16px" : "5px 22px", fontSize: mobileLandscape ? 11 : 12, color:"#ffffff44", display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:16 }}>{"\u{1F4E3}"}</span>
+          {tr("adSafe", lang)}
+        </div>
+      </div>
+
+      {shop && <Shop lang={lang} alreadyBought={unlocked.length === 9} onClose={() => setShop(false)} onBuy={() => { setUnlocked([1,2,3,4,5,6,7,8,9]); setShop(false); }} />}
+      {showSettings && <Settings soundOn={soundOn} setSoundOn={setSoundOn} hapticOn={hapticOn} setHapticOn={setHapticOn} lang={lang} setLang={setLang} onClose={() => setShowSettings(false)} onReset={handleReset} />}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+  </script>
+  <script>
+    // Enregistrement du Service Worker (PWA)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[MultiPlanet] SW enregistré:', reg.scope))
+          .catch(err => console.warn('[MultiPlanet] SW échec:', err));
+      });
+    }
+  </script>
+</body>
+</html>
